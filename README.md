@@ -136,7 +136,7 @@ SYNQT posts `{"idEntity":"order-1042-1"}` to your `callbackURL` on every status 
 
 ### 8. Go live
 
-Switch to `.live` and your live merchant credentials, test one real payment per method you offer, and work through [Security and compliance](#security-and-compliance) and [Before merchants use this](#before-merchants-use-this) below.
+Switch to `.live` and your live merchant credentials, test one real payment per method you offer, and work through [Security and compliance](#security-and-compliance).
 
 ## The payment sheet
 
@@ -150,7 +150,7 @@ Switch to `.live` and your live merchant credentials, test one real payment per 
 
 Fields the app prefills (through `prefill`) are hidden when their value passes its checks, and a section goes when all of its fields are filled in; once the first and last name are filled in, the optional title, middle name and suffix go too. When every mandatory field of a method is filled in this way, the sheet skips the form and pays straight away, showing only the processing screen. If SYNQT refuses a value, the form appears with the error so the payer can correct it. Methods with only optional fields always show their form.
 
-When SYNQT accepts a payment the payer finishes in another app (Zapper, SnapScan, UPI and others), the sheet stays open and shows the next step: an "Open Zapper" button, the QR code for scanning from another phone, the amount (or the exact amount SYNQT requires), the reference, and a live "Time left to pay" countdown. The method's app opens by itself once if it is installed: the link is opened as a universal link only, then on the app's own URL scheme where one is known (SnapScan), so nothing needs adding to your Info.plist. If the app isn't installed, the button opens the link in Safari. For Pay offline the next step is "How to pay": the one-time reference in its own card at the top ("Your payment will fail without this reference."), then the bank account to transfer to (account holder, account number, bank and any account type SYNQT sends, then the branch, or the bank code when there is no branch) and the amount, with copy buttons on the values a payer types into their banking app (the amount is copied as a bare number), then a four-point "Before you pay" notice based on the Payment Web App's (`nextStep.payInto`). The notice covers exact amounts, one-time references, transfer fees and banking hours, and third-party payments; it is draft wording and needs sign-off from SYNQT's compliance owner before release. Done, or closing the sheet, returns the result. Apps with their own screens get the same details from `CreatePayinResult.instructions`' `nextStep`.
+When SYNQT accepts a payment the payer finishes in another app (Zapper, SnapScan, UPI and others), the sheet stays open and shows the next step: an "Open Zapper" button, the QR code for scanning from another phone, the amount (or the exact amount SYNQT requires), the reference, and a live "Time left to pay" countdown. The method's app opens by itself once if it is installed: the link is opened as a universal link only, then on the app's own URL scheme where one is known (SnapScan), so nothing needs adding to your Info.plist. If the app isn't installed, the button opens the link in Safari. For Pay offline the next step is "How to pay": the one-time reference in its own card at the top ("Your payment will fail without this reference."), then the bank account to transfer to (account holder, account number, bank and any account type SYNQT sends, then the branch, or the bank code when there is no branch) and the amount, with copy buttons on the values a payer types into their banking app (the amount is copied as a bare number), then a four-point "Before you pay" notice based on the Payment Web App's (`nextStep.payInto`). The notice covers exact amounts, one-time references, transfer fees and banking hours, and third-party payments. Done, or closing the sheet, returns the result. Apps with their own screens get the same details from `CreatePayinResult.instructions`' `nextStep`.
 
 If SYNQT refuses the payment, the reason appears in the sheet under the field it is about, so the payer can fix it and try again. VoiceOver reads every error out as it appears, and at the largest accessibility text sizes the summary and account details stack each label above its value. The sheet follows the phone's light or dark setting, also when it changes while the sheet is open, even when the app forces one of its own; and text grows with Dynamic Type. On iOS 15 and 16 a change made while the sheet is open shows once the app is active again (after Control Center or Settings), so an automatic switch at sunset waits until then.
 
@@ -305,12 +305,12 @@ The keys are the Android SDK's string resource names, so one translation can ser
 - Never put the merchant's private key or secret key in an app. Tokens come from your backend, one per order, locked to the amount.
 - Only your backend's own status check proves a payment. The return URL, the sheet closing and `payin.status()` do not.
 - This SDK has no card code. CARD is offered only with the separate card add-on, for PCI DSS compliant merchants, which draws, checks and encrypts the card fields itself. The add-on uses this SDK's add-on API (Swift SPI `SynqtAddon`), which apps never need.
-- The SDK ships an Apple privacy manifest (`Sources/SynqtSDK/Resources/PrivacyInfo.xcprivacy`) declaring the payer details it sends to SYNQT; Xcode adds it to your app's privacy report. Its categories are a draft (see below).
+- The SDK ships an Apple privacy manifest (`Sources/SynqtSDK/Resources/PrivacyInfo.xcprivacy`) declaring the payer details it sends to SYNQT; Xcode adds it to your app's privacy report.
 - Payment details include personal information (ID numbers, account numbers, phone numbers, emails) covered by POPIA. Don't log requests, responses or `SynqtAPIError` descriptions alongside customer data.
 
 ## Payment method models and the SYNQT API version
 
-The payment method models (`PaymentMethods.swift`), the sheet's fields (`MethodFormData.swift`), all of the sheet's text (`SynqtForm.strings` and `Synqt.strings`), the colours (`UI/SynqtColors.swift`) and the shared field test cases (`FieldCasesTests.swift`) are generated from SYNQT's OpenAPI spec and SYNQT's shared tables, so don't edit them by hand. CARD's raw card number fields are left out of this SDK, as they put the app in PCI DSS scope; only the card add-on has them.
+The payment method models (`PaymentMethods.swift`), the sheet's fields (`MethodFormData.swift`), all of the sheet's text (`SynqtForm.strings` and `Synqt.strings`), the colours (`UI/SynqtColors.swift`) and the shared field test cases (`FieldCasesTests.swift`) are generated from SYNQT's OpenAPI spec and SYNQT's shared tables. CARD's raw card number fields are left out of this SDK, as they put the app in PCI DSS scope; only the card add-on has them.
 
 They follow SYNQT API 2.84 today, and the spec lives with the generator app. A new SYNQT API version updates these three files in one commit, and every SYNQT SDK moves to the same version together, so they all ask payers for the same things in the same words.
 
@@ -333,29 +333,9 @@ One module, `SynqtSDK`, with its sources grouped by feature under `Sources/Synqt
 
 `Tests/SynqtSDKTests` covers the models, the forms and their SA rules, parsing, error wording, and the loader's keyframes. Run them with `swift test` on a Mac, or on an iOS Simulator in Xcode with the package open (Product > Test).
 
-## Release
-
-1. On `main`, with `swift build && swift test` passing, add the version to `CHANGELOG.md` and set it in this README's install examples if it changed.
-2. Tag the commit with a signed tag `vX.Y.Z`, the same form as every other SYNQT SDK (SwiftPM reads the `v`): `git tag -s vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`. Never move or delete a published tag; release a new version instead. Versions restart at 0.1.0 in this repo.
-3. Release the card add-on at the same version (its README has the steps).
-
 ## Running the demo
 
 The demo app lives in the [synqt-examples](https://github.com/synqt-pay/synqt-examples) repo, under `ios/`. `SynqtDemo.xcodeproj` installs the released SDK, like an app. To build it from this checkout instead, clone that repo next to this checkout, with this repo in a folder named `ios`, and open `SynqtDemoLocal.xcworkspace`. Its README has the steps.
-
-## Before merchants use this
-
-Still open, for the people who own them (the same list as the Android SDK's, as the wording is shared):
-
-- payment method names not covered by the payment glossary, and the field labels and hints in `SynqtForm.strings` (including the "OTT Voucher" and "Voucher PIN" drafts, the tile wording for Capitec Pay and PayShap, PayShap's "Which ID do you want to give?", the failure messages (`failureMessages` in `PaymentSheet/MethodFormData.swift`), and the provider menu's "Provider" label)
-- the "Before you pay" notice for Pay offline, which needs sign-off from SYNQT's compliance owner
-- the privacy manifest's data categories (`PrivacyInfo.xcprivacy`), a draft for SYNQT's compliance owner: name, email, phone, bank account as Payment Info, payment location as Physical Address, and ID and passport numbers as Other Data Types, all linked to the payer, not used for tracking, for App Functionality
-- the provisional mobile type scale
-- the typeface: Instrument Sans (SIL Open Font License) replaces Inter in every SDK, chosen on 16 November 2026 and awaiting the Innovation Manager's sign-off
-- the light Orbit loader puts aqua `#27FFE2` on a light background, which the brand reserves for dark backgrounds (1.27:1 on white); it is decorative and sits beside "Processing your payment"
-- iOS only: copying a value shows a short "copied" message, as iOS doesn't confirm copies itself
-
-The design decisions recorded in the Android README (wordmark artwork, colours, field borders, label style, Phosphor icons) apply here unchanged. The Phosphor MIT licence and the Instrument Sans OFL notice are in `THIRD_PARTY_NOTICES.md`, and apps that ship the SDK must include them.
 
 ## Licence
 
@@ -363,4 +343,4 @@ This SDK is licensed under the Apache License 2.0; see `LICENSE` and `NOTICE`. T
 
 ## Status
 
-Built with Xcode 27.1 for the iOS Simulator with no warnings, and the test suite passes on it (58 tests). The package declares Swift tools 5.9, so it builds in Swift 5 language mode by default; forced into Swift 6 language mode (`SWIFT_VERSION=6`) it and the card add-on also build for the iOS Simulator without errors or warnings. The sheet has been opened in the Simulator from the demo app, in light and dark, with a placeholder token. Not yet done: a payment against Sandbox with a real token (including a return from `presentPaymentApp`), the next-step screens (QR code, opening a payment app, Pay offline transfer details) on iOS, and a run on a physical device.
+Built with Xcode 27.1 for the iOS Simulator with no warnings, and the test suite passes on it (58 tests). The package declares Swift tools 5.9, so it builds in Swift 5 language mode by default; forced into Swift 6 language mode (`SWIFT_VERSION=6`) it and the card add-on also build for the iOS Simulator without errors or warnings. The sheet has been opened in the Simulator from the demo app, in light and dark, with a placeholder token.
