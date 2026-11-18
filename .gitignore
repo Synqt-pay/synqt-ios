@@ -1,0 +1,18 @@
+# Build output and caches
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Machine-specific
+.DS_Store
+
+# Credentials must never be committed: merchant keys, keystores, env files
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+.env
+.env.*
