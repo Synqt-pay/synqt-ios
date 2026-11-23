@@ -64,7 +64,7 @@ struct PaymentSheetView: View {
     private var formContent: some View {
         SummaryCard(summary: model.summary).id("top")
         if !model.allFilledIn {
-            Text(text("synqt_sheet_your_details")).font(.synqt(20)).foregroundColor(colors.text).padding(.top, 24).padding(.bottom, 8)
+            Text(text("synqt_sheet_your_details")).font(.synqt(20, .semibold)).foregroundColor(colors.text).padding(.top, 24).padding(.bottom, 8)
                 .accessibilityAddTraits(.isHeader)
             Text(model.intro).font(.synqt(16)).foregroundColor(colors.textMuted).padding(.bottom, 16)
         }
@@ -158,7 +158,7 @@ struct PaymentSheetView: View {
     private var processingView: some View {
         VStack(spacing: 0) {
             OrbitLoader().frame(width: 72, height: 72)
-            Text(text("synqt_sheet_processing")).font(.synqt(20)).foregroundColor(colors.text).padding(.top, 24).padding(.bottom, 8)
+            Text(text("synqt_sheet_processing")).font(.synqt(20, .semibold)).foregroundColor(colors.text).padding(.top, 24).padding(.bottom, 8)
             Text(text("synqt_sheet_processing_detail")).font(.synqt(16)).foregroundColor(colors.textMuted)
         }
         .multilineTextAlignment(.center)
@@ -308,7 +308,7 @@ private struct NextStepView: View {
                     .padding(.top, 24).padding(.bottom, 8)
             }
             Text(transfer != nil ? text("synqt_next_transfer_title") : text("synqt_next_title", name))
-                .font(.synqt(20)).foregroundColor(colors.text).padding(.top, 24).padding(.bottom, 8).accessibilityAddTraits(.isHeader)
+                .font(.synqt(20, .semibold)).foregroundColor(colors.text).padding(.top, 24).padding(.bottom, 8).accessibilityAddTraits(.isHeader)
             Text(how).font(.synqt(16)).foregroundColor(colors.textMuted).padding(.bottom, 8)
             if let exact = next.amountToPay {
                 Text(text("synqt_next_pay_exactly", exact.description)).font(.synqt(16, .medium)).monospacedDigit().foregroundColor(colors.text).padding(.bottom, 8)

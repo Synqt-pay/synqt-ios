@@ -4,7 +4,7 @@ import SwiftUI
 // Mobile type scale in Instrument Sans, spacing in 4, 8, 16 and 24pt, 12pt cards and inputs, 48pt pill buttons, a visible focus
 // ring, light and dark. Colours follow the screen's colour scheme (see SynqtColors).
 
-/// A panel with a title in the mobile subtitle style (20pt Regular).
+/// A panel with a title in the sheet's heading style (20pt SemiBold).
 public struct SynqtCard<Content: View>: View {
     @Environment(\.colorScheme) private var scheme
     let title: String
@@ -18,7 +18,7 @@ public struct SynqtCard<Content: View>: View {
     public var body: some View {
         let colors = SynqtColors.for(scheme)
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.synqt(20)).foregroundColor(colors.text)
+            Text(title).font(.synqt(20, .semibold)).foregroundColor(colors.text)
             content
         }
         .padding(16)
