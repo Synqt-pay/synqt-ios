@@ -5,7 +5,6 @@
 
 /* Form */
 "synqt_sheet_your_details" = "Your details";
-"synqt_sheet_intro" = "Enter your details to pay with %1$@.";
 "synqt_sheet_intro_nothing_to_enter" = "No details needed. Tap Pay to continue.";
 "synqt_sheet_pay" = "Pay %1$@";
 "synqt_sheet_secure_checkout" = "Secure checkout";
@@ -13,6 +12,12 @@
 "synqt_sheet_no_preference" = "No preference";
 "synqt_sheet_hint_bank_code" = "The code from your bank or provider";
 "synqt_sheet_hint_provider_code" = "The code from your provider";
+
+/* Shown in place of a mandatory bank or provider field when SYNQT's list didn't load after two automatic retries. Draft, 23 Nov 2026, awaiting the Innovation Manager. */
+"synqt_sheet_banks_failed" = "The list of banks could not be loaded. Check the connection and try again.";
+
+/* The button that loads the list of banks again. */
+"synqt_sheet_try_again" = "Try again";
 "synqt_sheet_required" = "Required";
 "synqt_sheet_check_field" = "Check this field";
 

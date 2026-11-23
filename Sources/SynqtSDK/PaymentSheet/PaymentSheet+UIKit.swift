@@ -43,6 +43,7 @@ extension Payin {
             try await self.create(method, customerIP: customerIP)
         }
         model.onPaymentStarted = onPaymentStarted
+        model.reloadOperators = { await self.sheetOperators(for: form) }
         return await PaymentSheetController(model: model).present(from: viewController, onPresented: onPresented)
     }
 
@@ -70,6 +71,12 @@ private final class PaymentSheetController: UIHostingController<PaymentSheetView
         let code = model.form.code
         model.copy = { UIPasteboard.general.string = $0 }
         model.announce = { UIAccessibility.post(notification: .announcement, argument: $0) }
+        // The iPad's centred card grows to fit the form instead of its fixed default size; UIKit keeps it on screen, and a
+        // phone's sheet ignores it.
+        model.fitHeight = { [weak self] height in
+            guard let self, view.bounds.width > 0 else { return }
+            preferredContentSize = CGSize(width: view.bounds.width, height: height.rounded(.up)) // a zero width is ignored
+        }
         // Only the close button closes it, like Android: no tap outside, and no swipe down, as iOS can't block one without the other.
         isModalInPresentation = true
         model.openLink = { link in

@@ -85,7 +85,7 @@ public struct SynqtTextField: View {
         let colors = SynqtColors.for(scheme)
         VStack(alignment: .leading, spacing: 0) {
             Text(label).font(.synqt(16, .medium)).foregroundColor(colors.text).padding(.bottom, 8)
-            input(TextField("", text: $draft, prompt: Text(placeholder).foregroundColor(colors.textMuted)))
+            input(TextField("", text: $draft, prompt: Text(placeholder).foregroundColor(colors.placeholder)))
                 .font(.synqt(16))
                 .foregroundColor(colors.text)
                 .focused($focused)
@@ -94,7 +94,9 @@ public struct SynqtTextField: View {
                 .background(RoundedRectangle(cornerRadius: 12).fill(colors.surface))
                 .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(focused ? colors.focusRing : error != nil ? colors.danger : colors.borderControl, lineWidth: focused ? 2 : 1))
                 .accessibilityLabel(label)
-                .accessibilityHint(error ?? (helper.isEmpty ? placeholder : helper))
+                // The error follows what was typed, so VoiceOver says it on landing on the field; hints can be off.
+                .accessibilityValue(error.map { draft.isEmpty ? $0 : "\(draft), \($0)" } ?? draft)
+                .accessibilityHint(helper.isEmpty ? placeholder : helper)
             helperText(error ?? helper, error != nil, colors)
         }
         .padding(.bottom, 16)
@@ -147,8 +149,8 @@ public struct SynqtDropdown: View {
                 .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(error != nil ? colors.danger : colors.borderControl))
             }
             .accessibilityLabel(label)
-            .accessibilityValue(shown)
-            .accessibilityHint(error ?? helper)
+            .accessibilityValue(error.map { "\(shown), \($0)" } ?? shown) // as on SynqtTextField
+            .accessibilityHint(helper)
             helperText(error ?? helper, error != nil, colors)
         }
         .padding(.bottom, 16)

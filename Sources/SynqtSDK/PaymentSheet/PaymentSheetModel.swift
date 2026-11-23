@@ -26,7 +26,10 @@ final class PaymentSheetModel: ObservableObject {
     let summary: PaymentSummary
     let methodName: String
     private let prefill: [String: String]
-    private let operators: [PaymentOperator]
+    @Published private(set) var operators: [PaymentOperator]
+    /// SYNQT's list of banks and providers could not be loaded, so a mandatory bank or provider field can't be filled in.
+    @Published private(set) var banksFailed: Bool
+    @Published private(set) var loadingBanks = false
     private let submit: (PaymentMethod) async throws -> CreatePayinResult
     /// An add-on method's own fields, which it draws, checks and builds itself; nil for built-in methods.
     let addon: SheetAddon?
@@ -69,12 +72,19 @@ final class PaymentSheetModel: ObservableObject {
     var copy: (String) -> Void = { _ in }
     /// Reads text out to VoiceOver users without moving their focus.
     var announce: (String) -> Void = { _ in }
+    /// The height the whole sheet needs to show everything without scrolling, for a presenter that can size to it (iPad).
+    var fitHeight: (CGFloat) -> Void = { _ in }
+    /// Loads the banks and providers again, as the presenter first did; nil if they still could not be loaded.
+    var reloadOperators: () async -> [PaymentOperator]? = { nil }
 
-    init(form: MethodForm, prefill: [String: String], operators: [PaymentOperator], summary: PaymentSummary, addon: SheetAddon? = nil,
+    /// `operators` is nil when SYNQT's list could not be loaded.
+    init(form: MethodForm, prefill: [String: String], operators: [PaymentOperator]?, summary: PaymentSummary, addon: SheetAddon? = nil,
          submit: @escaping (PaymentMethod) async throws -> CreatePayinResult) {
         self.form = form
         self.addon = addon
         self.prefill = prefill
+        banksFailed = operators == nil
+        let operators = operators ?? []
         self.operators = operators
         self.summary = summary
         self.submit = submit
@@ -108,6 +118,24 @@ final class PaymentSheetModel: ObservableObject {
     /// Values as they are checked and sent: fields of tiles the payer did not pick read as blank.
     func effectiveValues() -> [String: String] {
         Dictionary(uniqueKeysWithValues: inputs.map { ($0.path, form.shows($0.path, chosen) ? values[$0.path] ?? "" : "") })
+    }
+
+    /// A mandatory bank or provider field shown as "couldn't load" with Try again, as the payer can't fill it in. An
+    /// optional one stays as it was without a list: a bank field is hidden, a provider field takes a typed code.
+    func banksMissing(_ field: FormField) -> Bool { banksFailed && field.required && (field.kind == .operator || field.kind == .provider) }
+
+    /// Try again: loads the banks and providers once more, with the same retries; the fields come back on success.
+    func retryBanks() {
+        guard banksFailed, !loadingBanks else { return }
+        loadingBanks = true
+        Task {
+            let loaded = await reloadOperators()
+            loadingBanks = false
+            guard let loaded else { return announce(text("synqt_sheet_banks_failed")) }
+            operators = loaded
+            banksFailed = false
+            for field in inputs where field.kind == .operator || field.kind == .provider { marks[field.path] = nil }
+        }
     }
 
     /// The choices for a dropdown field, with "Choose one" or "No preference" first, or nil for a typed field.
@@ -145,8 +173,9 @@ final class PaymentSheetModel: ObservableObject {
     /// Everything filled in by the app: the whole details section goes, leaving the summary and Pay.
     var allFilledIn: Bool { !inputs.isEmpty && !inputs.contains { visible($0.path) } }
 
-    var intro: String {
-        inputs.isEmpty && addon == nil ? text("synqt_sheet_intro_nothing_to_enter") : text("synqt_sheet_intro", methodName)
+    /// Only when there is nothing to enter; otherwise the summary already names the method, so no intro.
+    var intro: String? {
+        inputs.isEmpty && addon == nil ? text("synqt_sheet_intro_nothing_to_enter") : nil
     }
 
     func binding(_ field: FormField) -> Binding<String> {

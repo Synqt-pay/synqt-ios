@@ -82,15 +82,32 @@ public struct Payin: Sendable {
         return synqt.environment.paymentAppBaseURL + "?" + params.map { "\(enc($0.0))=\(enc($0.1))" }.joined(separator: "&")
     }
 
-    /// Banks and providers for `form`'s bank or provider field, and the merchant's name for the summary. Both are
-    /// niceties: without the bank list the sheet hides an optional bank field or asks for the code, and without the
-    /// merchant name the summary leaves that row out.
-    func sheetContext(for form: MethodForm) async -> (operators: [PaymentOperator], merchant: String?) {
-        async let operators: [PaymentOperator] = form.fields.contains { $0.kind == .operator || $0.kind == .provider }
-            ? ((try? await availablePaymentOptions().first { $0.code == form.code }?.operators) ?? [])
+    /// Banks and providers for `form`'s bank or provider field (nil if they could not be loaded), and the merchant's name
+    /// for the summary, which is a nicety: without it the summary leaves that row out.
+    func sheetContext(for form: MethodForm) async -> (operators: [PaymentOperator]?, merchant: String?) {
+        async let operators: [PaymentOperator]? = form.fields.contains { $0.kind == .operator || $0.kind == .provider }
+            ? sheetOperators(for: form)
             : []
         async let merchant = try? JSON.parse(await synqt.call("GET", "/merchant-info", token: token))["channelInfo"]?["name"]?.text
         return await (operators, merchant ?? nil)
+    }
+
+    /// SYNQT's banks and providers for `form`, empty if it lists none, or nil if they could not be loaded. A failed
+    /// connection or a SYNQT server error is tried twice more, 2 seconds apart; a refusal such as 403 is not.
+    func sheetOperators(for form: MethodForm, retryAfter delay: UInt64 = 2_000_000_000) async -> [PaymentOperator]? {
+        for attempt in 0..<3 {
+            if attempt > 0 {
+                do { try await Task.sleep(nanoseconds: delay) } catch { return nil } // cancelled
+            }
+            do {
+                return try await availablePaymentOptions().first { $0.code == form.code }?.operators ?? []
+            } catch let refused as SynqtAPIError where refused.httpCode < 500 {
+                return nil
+            } catch {
+                continue
+            }
+        }
+        return nil
     }
 }
 

@@ -12,7 +12,8 @@ struct PaymentSheetView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            // The header and Pay bar stay on screen, so they grow less with the text size than the form between them.
+            header.measured().dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             Divider().overlay(colors.border)
             ScrollViewReader { proxy in
                 ScrollView {
@@ -22,6 +23,7 @@ struct PaymentSheetView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 16)
                     .padding(.bottom, 8)
+                    .measured()
                 }
                 .onChange(of: model.focusRequest?.count) { _ in
                     guard let target = model.focusRequest?.path else { return }
@@ -29,18 +31,20 @@ struct PaymentSheetView: View {
                 }
                 .onChange(of: model.next) { _ in proxy.scrollTo("top", anchor: .top) }
             }
+            // Just above the bar, however tall the bar has grown with its buttons and the text size.
+            .overlay(alignment: .bottom) {
+                if let toast = model.toast {
+                    Text(toast).font(.synqt(16)).foregroundColor(colors.surface).padding(.horizontal, 16).padding(.vertical, 8)
+                        .background(Capsule().fill(colors.text)).padding(.bottom, 16)
+                }
+            }
             Divider().overlay(colors.border)
-            bottomBar
+            bottomBar.measured().dynamicTypeSize(...DynamicTypeSize.accessibility1)
         }
+        .onPreferenceChange(MeasuredHeight.self) { model.fitHeight($0 + 2) } // plus the two dividers
         .accessibilityHidden(model.processing) // VoiceOver can't wander into the covered form
         .background(colors.surface.ignoresSafeArea())
         .overlay(processingView.opacity(model.processing ? 1 : 0))
-        .overlay(alignment: .bottom) {
-            if let toast = model.toast {
-                Text(toast).font(.synqt(16)).foregroundColor(colors.surface).padding(.horizontal, 16).padding(.vertical, 8)
-                    .background(Capsule().fill(colors.text)).padding(.bottom, 96)
-            }
-        }
         .tint(colors.action)
     }
 
@@ -62,11 +66,12 @@ struct PaymentSheetView: View {
 
     @ViewBuilder
     private var formContent: some View {
-        SummaryCard(summary: model.summary).id("top")
+        SummaryCard(summary: model.summary, showSecure: true).id("top")
         if !model.allFilledIn {
-            Text(text("synqt_sheet_your_details")).font(.synqt(20, .semibold)).foregroundColor(colors.text).padding(.top, 24).padding(.bottom, 8)
+            Text(text("synqt_sheet_your_details")).font(.synqt(20, .semibold)).foregroundColor(colors.text).padding(.top, 24)
+                .padding(.bottom, model.intro == nil ? 16 : 8)
                 .accessibilityAddTraits(.isHeader)
-            Text(model.intro).font(.synqt(16)).foregroundColor(colors.textMuted).padding(.bottom, 16)
+            if let intro = model.intro { Text(intro).font(.synqt(16)).foregroundColor(colors.textMuted).padding(.bottom, 16) }
         }
         ForEach(rows.indices, id: \.self) { index in
             switch rows[index] {
@@ -121,7 +126,9 @@ struct PaymentSheetView: View {
 
     @ViewBuilder
     private func field(_ field: FormField) -> some View {
-        if let options = model.options(field) {
+        if model.banksMissing(field) {
+            banksFailed(field).id(field.path)
+        } else if let options = model.options(field) {
             SynqtDropdown(text(field.label), selection: model.binding(field), options: options, helper: model.hint(field), error: model.marks[field.path])
                 .id(field.path)
         } else {
@@ -130,8 +137,27 @@ struct PaymentSheetView: View {
             SynqtTextField(text(field.label), text: model.binding(field), helper: model.hint(field),
                            placeholder: field.placeholder.map { text($0) } ?? "", error: model.marks[field.path], keyboard: keyboard)
                 .focus(request: model.focusRequest?.path == field.path ? model.focusRequest!.count : 0) { model.focus(field.path, $0) }
+                .autoFill(field.path)
                 .id(field.path)
         }
+    }
+
+    /// In place of a bank or provider field whose list didn't load: the label, why, and Try again.
+    private func banksFailed(_ field: FormField) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(text(field.label)).font(.synqt(16, .medium)).foregroundColor(colors.text)
+            SynqtErrorBanner(text("synqt_sheet_banks_failed"))
+            Button(action: model.retryBanks) {
+                ZStack {
+                    Text(text("synqt_sheet_try_again")).opacity(model.loadingBanks ? 0 : 1)
+                    if model.loadingBanks { ProgressView() }
+                }
+            }
+            .buttonStyle(SynqtButtonStyle(.outline))
+            .disabled(model.loadingBanks)
+            .accessibilityLabel(text("synqt_sheet_try_again"))
+        }
+        .padding(.bottom, 16)
     }
 
     @ViewBuilder
@@ -144,10 +170,6 @@ struct PaymentSheetView: View {
                 Button(text("synqt_next_done"), action: model.close).buttonStyle(SynqtButtonStyle(next.appLink != nil ? .outline : .primary))
             } else {
                 Button(text("synqt_sheet_pay", model.summary.amount), action: model.pay).buttonStyle(SynqtButtonStyle(.primary)).monospacedDigit()
-                HStack(spacing: 8) {
-                    IconView(icon: .lock, size: 16, color: colors.textMuted)
-                    Text(text("synqt_sheet_secure_checkout")).font(.synqt(13)).foregroundColor(colors.textMuted)
-                }
             }
         }
         .padding(.horizontal, 16)
@@ -167,6 +189,38 @@ struct PaymentSheetView: View {
         .background(colors.surface.ignoresSafeArea())
         .accessibilityElement(children: .combine)
         .allowsHitTesting(model.processing) // keeps taps off the form underneath
+    }
+}
+
+#if os(iOS)
+/// What iOS may offer from the payer's contact card for a field; email and phone get theirs from `SynqtKeyboard`.
+private let autoFillTypes: [String: UITextContentType] = [
+    "customerName.titleBefore": .namePrefix, "customerName.firstName": .givenName, "customerName.middleName": .middleName,
+    "customerName.lastName": .familyName, "customerName.titleAfter": .nameSuffix, "account.accountName": .name,
+    "paymentLocation.postalCode": .postalCode, "paymentLocation.city": .addressCity,
+]
+#endif
+
+private extension View {
+    @ViewBuilder
+    func autoFill(_ path: String) -> some View {
+        #if os(iOS)
+        if let type = autoFillTypes[path] { textContentType(type) } else { self }
+        #else
+        self
+        #endif
+    }
+}
+
+/// Sum of the heights of the views marked `measured()`: the header, the whole form and the Pay bar.
+private struct MeasuredHeight: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value += nextValue() }
+}
+
+private extension View {
+    func measured() -> some View {
+        background(GeometryReader { Color.clear.preference(key: MeasuredHeight.self, value: $0.size.height) })
     }
 }
 
@@ -208,6 +262,8 @@ private struct SummaryCard: View {
     @Environment(\.colorScheme) private var scheme
     let summary: PaymentSummary
     var showReference = true
+    /// The form's summary ends with "Secure checkout", which scrolls with it rather than taking room from the Pay bar.
+    var showSecure = false
 
     var body: some View {
         let colors = SynqtColors.for(scheme)
@@ -219,6 +275,15 @@ private struct SummaryCard: View {
             if let merchant = summary.merchant { DetailRow(label: text("synqt_sheet_paying"), value: merchant) }
             DetailRow(label: text("synqt_sheet_payment_method"), value: summary.method)
             if showReference { DetailRow(label: text("synqt_sheet_reference"), value: summary.reference) }
+            if showSecure {
+                HStack(spacing: 8) {
+                    IconView(icon: .lock, size: 16, color: colors.textMuted)
+                    Text(text("synqt_sheet_secure_checkout")).font(.synqt(13)).foregroundColor(colors.textMuted).multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 12)
+                .accessibilityElement(children: .combine)
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
