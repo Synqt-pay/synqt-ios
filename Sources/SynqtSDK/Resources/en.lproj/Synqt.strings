@@ -1,7 +1,6 @@
 /* Payer-facing text written for the payment sheet. Field labels, hints and method names are in
    SynqtForm.strings. Both are generated: don't edit them by hand. Translations go in <language>.lproj/Synqt.strings
-   with the same keys, keeping the placeholders. Keys match the Android SDK's string resources. Draft wording awaiting
-   sign-off is listed in the README. */
+   with the same keys, keeping the placeholders. Keys match the Android SDK's string resources. */
 
 /* Form */
 "synqt_sheet_your_details" = "Your details";
@@ -13,7 +12,7 @@
 "synqt_sheet_hint_bank_code" = "The code from your bank or provider";
 "synqt_sheet_hint_provider_code" = "The code from your provider";
 
-/* Shown in place of a mandatory bank or provider field when SYNQT's list didn't load after two automatic retries. Draft, 23 Nov 2026, awaiting the Innovation Manager. */
+/* Shown in place of a mandatory bank or provider field when SYNQT's list didn't load after two automatic retries. */
 "synqt_sheet_banks_failed" = "The list of banks could not be loaded. Check the connection and try again.";
 
 /* The button that loads the list of banks again. */
