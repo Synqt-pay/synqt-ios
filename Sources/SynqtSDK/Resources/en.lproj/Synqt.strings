@@ -13,7 +13,7 @@
 "synqt_sheet_hint_bank_code" = "The code from your bank or provider";
 "synqt_sheet_hint_provider_code" = "The code from your provider";
 
-/* Shown in place of a mandatory bank or provider field when SYNQT's list didn't load after two automatic retries. Draft, 23 Nov 2026, awaiting the Innovation Manager. */
+/* Shown in place of a mandatory bank or provider field when SYNQT's list didn't load after two automatic retries. Approved by the Innovation Manager, 24 Nov 2026. */
 "synqt_sheet_banks_failed" = "The list of banks could not be loaded. Check the connection and try again.";
 
 /* The button that loads the list of banks again. */
