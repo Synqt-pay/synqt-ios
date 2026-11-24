@@ -10,6 +10,8 @@ public struct SynqtColors: Sendable {
     public let surfacePanel: Color
     public let text: Color
     public let textMuted: Color
+    /// Example text in an empty field, lighter than typed text so it can't pass for it: 4.73:1 on the light surface, 4.96:1 on the dark one. Proposed 23 Nov 2026, awaiting the Innovation Manager.
+    public let placeholder: Color
     public let onAccent: Color
     public let action: Color
     public let onAction: Color
@@ -37,6 +39,7 @@ public struct SynqtColors: Sendable {
         surfacePanel: Color(rgb: 0xF0F0F0),
         text: Color(rgb: 0x1A1C29),
         textMuted: Color(rgb: 0x4E5670),
+        placeholder: Color(rgb: 0x6B7389),
         onAccent: Color(rgb: 0x1A1C29),
         action: Color(rgb: 0xB505BF),
         onAction: Color(rgb: 0xFFFFFF),
@@ -56,6 +59,7 @@ public struct SynqtColors: Sendable {
         surfacePanel: Color(rgb: 0x212536),
         text: Color(rgb: 0xFFFFFF),
         textMuted: Color(rgb: 0xA7AFC5),
+        placeholder: Color(rgb: 0x838B9F),
         onAccent: Color(rgb: 0x1A1C29),
         action: Color(rgb: 0xF318FF),
         onAction: Color(rgb: 0x1A1C29),
