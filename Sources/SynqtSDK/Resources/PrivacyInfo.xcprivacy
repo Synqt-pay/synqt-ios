@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- DRAFT for sign-off by SYNQT's compliance owner: the data the payment sheet and Payin.create send to SYNQT to make
+<!-- DRAFT for sign-off by SYNQT's compliance owner: the data the payment sheet and IncomingPaymentsApi.createPayin send to SYNQT to make
      a payment, as Apple's privacy manifest categories. The categories are a proposal, not a decision. The SDK uses
      none of Apple's required-reason APIs and does not track. -->
 <plist version="1.0">

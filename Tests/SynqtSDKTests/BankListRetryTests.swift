@@ -24,15 +24,15 @@ private final class StubSYNQT: URLProtocol {
 }
 
 final class BankListRetryTests: XCTestCase {
-    private func operators(_ statuses: [Int]) async throws -> [PaymentOperator]? {
+    private func operators(_ statuses: [Int]) async throws -> [PaymentOperatorIncoming]? {
         StubSYNQT.statuses = statuses
         StubSYNQT.requests = 0
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [StubSYNQT.self]
-        let payin = try Synqt(.sandbox, session: URLSession(configuration: config))
-            .payin(token: "t", payinID: "order-1", money: Money(amount: 100, currencyCode: "ZAR"), returnURL: "https://x.io/r", callbackURL: "https://x.io/c")
+        let checkout = try Synqt(.sandbox, session: URLSession(configuration: config))
+            .checkout(token: "t", payinID: "order-1", money: MoneyPaymentRequested(amount: 100, currencyCode: "ZAR"), returnURL: "https://x.io/r")
         let form = try XCTUnwrap(methodForms.first { $0.code == "OFFLINE" })
-        return await payin.sheetOperators(for: form, retryAfter: 1_000_000)
+        return await checkout.sheetOperators(for: form, retryAfter: 1_000_000)
     }
 
     func testServerErrorsAreRetriedTwiceThenTheListLoads() async throws {
@@ -60,7 +60,7 @@ final class BankListRetryTests: XCTestCase {
                                       summary: PaymentSummary(amount: "R1.00", merchant: nil, method: "Pay offline", reference: "o-1")) { _ in throw URLError(.notConnectedToInternet) }
         let bank = try XCTUnwrap(model.inputs.first { $0.kind == .operator })
         XCTAssertTrue(model.banksMissing(bank))
-        model.reloadOperators = { [PaymentOperator(code: "ABSA", name: "Absa", externalProviders: [])] }
+        model.reloadOperators = { [PaymentOperatorIncoming(code: "ABSA", name: "Absa", externalProviders: nil)] }
         model.retryBanks()
         for _ in 0..<50 where model.banksFailed { try await Task.sleep(nanoseconds: 10_000_000) }
         XCTAssertFalse(model.banksMissing(bank))

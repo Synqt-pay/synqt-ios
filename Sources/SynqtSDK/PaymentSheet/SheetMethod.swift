@@ -16,8 +16,8 @@ public protocol SheetMethod: Sendable {
     var name: String { get }
     /// True covers the sheet while the app is in the app switcher and while the screen is recorded or mirrored.
     var secure: Bool { get }
-    /// The method's fields, for one sheet. `prefill` is the app's, as given to `Payin.presentPaymentSheet`.
-    @MainActor func section(payin: Payin, prefill: [String: String]) -> any MethodSection
+    /// The method's fields, for one sheet. `prefill` is the app's, as given to `PayinCheckout.presentPaymentSheet`.
+    @MainActor func section(checkout: PayinCheckout, prefill: [String: String]) -> any MethodSection
 }
 
 /// One sheet's fields for a `SheetMethod`. SwiftUI keeps the sheet through rotation and light, dark or text size

@@ -1,13 +1,16 @@
 import Foundation
 
 /**
- Entry point of the SYNQT payins SDK. Create one per environment, then one `Payin` per order:
+ Entry point of the SYNQT payins SDK. Create one per environment. For the ready-made payment sheet or Payment Web App,
+ make one `PayinCheckout` per order:
 
  ```
- let payin = try Synqt(.sandbox).payin(token: token, payinID: payinID,
-     money: Money(amount: 100, currencyCode: "ZAR"), returnURL: returnURL, callbackURL: callbackURL)
- let result = try await payin.presentPaymentSheet(from: viewController, paymentMethodCode: "CAPITEC_PAY")
+ let checkout = try Synqt(.sandbox).checkout(token: token, payinID: payinID,
+     money: MoneyPaymentRequested(amount: 100, currencyCode: "ZAR"), returnURL: returnURL, callbackURL: callbackURL)
+ let accepted = try await checkout.presentPaymentSheet(from: viewController, paymentMethodCode: "CAPITEC_PAY")
  ```
+
+ To call the API yourself, as with the Carpentum Java SDK, use `IncomingPaymentsApi`.
 
  The token is minted per order by YOUR backend (POST /auth-tokens-by-action, action PAYIN_CREATE, with `money` set).
  The merchant private key and Secret key must never ship in the app. A payment is only paid when your backend's own
@@ -46,28 +49,29 @@ public struct Synqt: Sendable {
         self.session = session
     }
 
-    /// One order's payin. `payinID` is your own ID for it (letters, digits, `_` and `-`, at most 250) and must match the
-    /// token. `returnURL` must be https: the Payment Web App rejects other schemes. Throws `SynqtArgumentError` otherwise.
-    public func payin(token: String, payinID: String, money: Money, returnURL: String, callbackURL: String) throws -> Payin {
-        guard payinID.count <= 250, payinID.range(of: "^[A-Za-z0-9_-]+$", options: .regularExpression) != nil else {
-            throw SynqtArgumentError("payinID must match ^[A-Za-z0-9_-]+$, max 250")
-        }
-        guard URL(string: returnURL)?.scheme?.lowercased() == "https" else {
-            throw SynqtArgumentError("returnURL must be https")
-        }
-        return Payin(synqt: self, token: token, id: payinID, money: money, returnURL: returnURL, callbackURL: callbackURL)
+    /// One order's payin for the payment sheet or Payment Web App. `payinID` is your own ID for it (letters, digits,
+    /// `_` and `-`, at most 250) and must match the token. `returnURL` must be https: the Payment Web App rejects other
+    /// schemes. `callbackURL` is where SYNQT sends your backend the final status. Throws `SynqtArgumentError` otherwise.
+    public func checkout(token: String, payinID: String, money: MoneyPaymentRequested, returnURL: String,
+                         callbackURL: String? = nil) throws -> PayinCheckout {
+        try IncomingPaymentsApi.checkID(payinID)
+        try IncomingPaymentsApi.checkReturnURL(returnURL)
+        return PayinCheckout(synqt: self, token: token, id: payinID, money: money, returnURL: returnURL, callbackURL: callbackURL)
     }
 
     /// Every bank and provider SYNQT knows, with the providers behind each. SYNQT may add codes at any time, so treat
-    /// unknown ones as normal. For what this merchant can use on a payin, use `Payin.availablePaymentOptions` instead.
+    /// unknown ones as normal. For what this merchant can use on a payin, use `IncomingPaymentsApi.payinAvailablePaymentOptions`
+    /// instead.
     ///
     /// `token` must allow `GET /payment-operators`. PAYIN_CREATE tokens do not, so mint one on your backend with
     /// `POST /auth-tokens` and that operation.
-    public func paymentOperators(token: String) async throws -> [PaymentOperator] {
-        parseOperators(try JSON.parse(await call("GET", "/payment-operators", token: token))["data"])
+    public func paymentOperators(token: String) async throws -> [PaymentOperatorIncoming] {
+        struct List: Decodable { let data: [PaymentOperatorIncoming]? }
+        return try JSONDecoder().decode(List.self, from: await call("GET", "/payment-operators", token: token)).data ?? []
     }
 
-    /// Methods `Payin.presentPaymentSheet` can collect details for. Offer only those `Payin.availablePaymentOptions` also returns.
+    /// Methods `PayinCheckout.presentPaymentSheet` can collect details for. Offer only those
+    /// `IncomingPaymentsApi.payinAvailablePaymentOptions` also returns.
     public static var directPaymentMethods: [DirectPaymentMethod] {
         (methodForms.map(\.code) + Addons.shared.all.map(\.code)).map { DirectPaymentMethod(code: $0) }
     }

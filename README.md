@@ -20,7 +20,7 @@ The SDK is a Swift package, installed from GitHub by version tag.
 - **Package.swift:**
 
   ```swift
-  dependencies: [.package(url: "https://github.com/synqt-pay/synqt-ios.git", .upToNextMinor(from: "0.1.0"))],
+  dependencies: [.package(url: "https://github.com/synqt-pay/synqt-ios.git", .upToNextMinor(from: "0.3.0"))],
   targets: [.target(name: "App", dependencies: [.product(name: "SynqtSDK", package: "synqt-ios")])]
   ```
 
@@ -32,7 +32,7 @@ Follow these in order. Steps 1 and 2 happen once; steps 3 to 7 happen for every 
 
 ### 1. Add the SDK to your project
 
-Add the package as in [Install](#install). The module is `SynqtSDK` and its entry point the `Synqt` type, so an app with its own `Money` or `PaymentMethod` can still write `SynqtSDK.Money`. The SDK brings its own fonts, strings and privacy manifest, so you add nothing to your Info.plist. Build once to check it compiles.
+Add the package as in [Install](#install). The module is `SynqtSDK` and its entry point the `Synqt` type, so an app with its own `Payin` or `Money` can still write `SynqtSDK.Payin`. The SDK brings its own fonts, strings and privacy manifest, so you add nothing to your Info.plist. Build once to check it compiles.
 
 Apps that ship the SDK must include the Phosphor Icons MIT notice and the Instrument Sans OFL notice in `THIRD_PARTY_NOTICES.md`, for example on an acknowledgements screen.
 
@@ -54,32 +54,35 @@ SYNQT calls need a short-lived token, and minting one needs the merchant's priva
 
 The `money` in the token locks it to that amount, so the app can't change it. Never return a token with wildcard operations to an app.
 
-### 3. Create the payin in the app
+### 3. Create the checkout in the app
 
 When the payer taps your checkout button, fetch a token from your backend, then:
 
 ```swift
 import SynqtSDK
 
-let payin = try Synqt(.sandbox).payin(
+let synqt = Synqt(.sandbox)
+let money = MoneyPaymentRequested(amount: Decimal(string: "1250.00")!, currencyCode: "ZAR") // the same amount and currency as the token
+let checkout = try synqt.checkout(
     token: response.token,
     payinID: response.payinID,
-    money: Money(amount: Decimal(string: "1250.00")!, currencyCode: "ZAR"), // the same amount and currency as the token
+    money: money,
     returnURL: "https://shop.example.com/payment/return", // https, see "Other ways to pay"
     callbackURL: "https://shop.example.com/synqt/callback" // your backend, step 7
 )
+let api = IncomingPaymentsApi(synqt: synqt, accessToken: response.token) // the API, for steps 4 and 6
 ```
 
-This makes no network call. It throws `SynqtArgumentError` if the payin ID is malformed. Use `.sandbox` while testing and `.live` for real payments.
+This makes no network call. It throws `SynqtArgumentError` if the payin ID is malformed or the return URL isn't https. Use `.sandbox` while testing and `.live` for real payments.
 
 ### 4. Choose the payment method
 
 Ask SYNQT what this merchant can take for this amount, and keep the ones the sheet supports:
 
 ```swift
-let offered = try await payin.availablePaymentOptions()
+let offered = try await api.payinAvailablePaymentOptions(PaymentRequested(money: money)).data ?? []
 let supported = Set(Synqt.directPaymentMethods.map(\.code))
-let choices = offered.filter { supported.contains($0.code) }
+let choices = offered.filter { supported.contains($0.paymentMethodCode ?? "") }
 ```
 
 Show `choices` in your own checkout, using `option.name` as the payer-facing name, and let the payer pick one. If your checkout only offers one method, you can skip this step and pass its code, such as `"CAPITEC_PAY"`, in step 5.
@@ -90,7 +93,7 @@ Present it from the view controller on screen. In SwiftUI, that is the window's 
 
 ```swift
 Task {
-    let result = try await payin.presentPaymentSheet(
+    let accepted = try await checkout.presentPaymentSheet(
         from: viewController,
         paymentMethodCode: methodCode,
         prefill: [
@@ -101,34 +104,36 @@ Task {
         onPresented: { /* the sheet is on screen */ },
         onPaymentStarted: { /* details sent to SYNQT: start showing progress, step 6 */ }
     )
-    switch result {
-    case nil: break                       // the payer closed the sheet without paying
-    case .instructions?: break            // the sheet already showed the next step; go to step 6
-    case let .redirect(httpMethod, url, formData)?: break // open url, see below
+    if accepted == nil {
+        // the payer closed the sheet without paying
+    } else if let redirect = accepted?.redirect() {
+        // open redirect.url, see below
+    } else {
+        // the sheet already showed the next step; go to step 6
     }
 }
 ```
 
 Pass in `prefill` whatever your app already knows about the payer. The sheet hides those fields, and pays straight away when nothing mandatory is left to ask. See [The payment sheet](#the-payment-sheet) for what it shows.
 
-A `.redirect` means the payer finishes on a bank's page. For `httpMethod` GET, open `url` in a `WKWebView` or Safari. For POST, submit `formData` to it as an HTML form, for example by loading a self-submitting form into a `WKWebView` with `loadHTMLString`. The demo's `PaymentWebView` handles GET.
+The sheet returns SYNQT's `PayinAcceptedResponse`. When `redirect()` gives a `Redirection`, the payer finishes on a bank's page (or a card's 3-D Secure page). For `method` GET, open `url` in a `WKWebView` or Safari. For POST, submit `formData()` to it as an HTML form, for example by loading a self-submitting form into a `WKWebView` with `loadHTMLString`. The demo's `PaymentWebView` handles GET.
 
 To skip the sheet and use SYNQT's hosted Payment Web App instead, call `presentPaymentApp` here; see [Other ways to pay](#other-ways-to-pay).
 
 ### 6. Show the payer where the payment stands
 
-Once `onPaymentStarted` has run (or the Payment Web App has opened), poll `payin.status()` every few seconds until it is final:
+Once `onPaymentStarted` has run (or the Payment Web App has opened), poll `api.getPayin(idPayin:)` every few seconds until it is final:
 
 ```swift
-let s = try await payin.status()
-switch s.status {
-case .success: break // show "Paid", but fulfil only from step 7
-case .failed, .refused: showError(s.failureReason?.payerMessage)
-default: break       // .processing or .unknown: keep polling
+let detail = try await api.getPayin(idPayin: response.payinID)
+switch detail.process?.status {
+case PaymentStatus.success: break // show "Paid", but fulfil only from step 7
+case PaymentStatus.failed, PaymentStatus.refused: showError(detail.process?.failureReasons?.payerMessage)
+default: break // PROCESSING, or a status SYNQT adds later: keep polling
 }
 ```
 
-Stop polling when the payer leaves the screen or `s.status.isFinal` is true. Before the payment is created, `status()` throws `SynqtAPIError` with HTTP 410.
+`detail.isFinal` says whether to stop. Stop polling when the payer leaves the screen too. Before the payment is created, `getPayin` throws `SynqtAPIError` with HTTP 410.
 
 ### 7. Confirm the payment on your backend
 
@@ -150,7 +155,7 @@ Switch to `.live` and your live merchant credentials, test one real payment per 
 
 Fields the app prefills (through `prefill`) are hidden when their value passes its checks, and a section goes when all of its fields are filled in; once the first and last name are filled in, the optional title, middle name and suffix go too. When every mandatory field of a method is filled in this way, the sheet skips the form and pays straight away, showing only the processing screen. If SYNQT refuses a value, the form appears with the error so the payer can correct it. Methods with only optional fields always show their form.
 
-When SYNQT accepts a payment the payer finishes in another app (Zapper, SnapScan, UPI and others), the sheet stays open and shows the next step: an "Open Zapper" button, the QR code for scanning from another phone, the amount (or the exact amount SYNQT requires), the reference, and a live "Time left to pay" countdown. The method's app opens by itself once if it is installed: the link is opened as a universal link only, then on the app's own URL scheme where one is known (SnapScan), so nothing needs adding to your Info.plist. If the app isn't installed, the button opens the link in Safari. For Pay offline the next step is "How to pay": the one-time reference in its own card at the top ("Your payment will fail without this reference."), then the bank account to transfer to (account holder, account number, bank and any account type SYNQT sends, then the branch, or the bank code when there is no branch) and the amount, with copy buttons on the values a payer types into their banking app (the amount is copied as a bare number), then a four-point "Before you pay" notice based on the Payment Web App's (`nextStep.payInto`). The notice covers exact amounts, one-time references, transfer fees and banking hours, and third-party payments. Done, or closing the sheet, returns the result. Apps with their own screens get the same details from `CreatePayinResult.instructions`' `nextStep`.
+When SYNQT accepts a payment the payer finishes in another app (Zapper, SnapScan, UPI and others), the sheet stays open and shows the next step: an "Open Zapper" button, the QR code for scanning from another phone, the amount (or the exact amount SYNQT requires), the reference, and a live "Time left to pay" countdown. The method's app opens by itself once if it is installed: the link is opened as a universal link only, then on the app's own URL scheme where one is known (SnapScan), so nothing needs adding to your Info.plist. If the app isn't installed, the button opens the link in Safari. For Pay offline the next step is "How to pay": the one-time reference in its own card at the top ("Your payment will fail without this reference."), then the bank account to transfer to (account holder, account number, bank and any account type SYNQT sends, then the branch, or the bank code when there is no branch) and the amount, with copy buttons on the values a payer types into their banking app (the amount is copied as a bare number), then a four-point "Before you pay" notice based on the Payment Web App's (`nextStep.payInto`). The notice covers exact amounts, one-time references, transfer fees and banking hours, and third-party payments. Done, or closing the sheet, returns the result. Apps with their own screens get the same details from the response's `nextStep()`.
 
 If SYNQT refuses the payment, the reason appears in the sheet under the field it is about, so the payer can fix it and try again. VoiceOver reads every error out as it appears, and at the largest accessibility text sizes the summary and account details stack each label above its value. The sheet follows the phone's light or dark setting, also when it changes while the sheet is open, even when the app forces one of its own; and text grows with Dynamic Type. On iOS 15 and 16 a change made while the sheet is open shows once the app is active again (after Control Center or Settings), so an automatic switch at sunset waits until then.
 
@@ -159,28 +164,34 @@ If SYNQT refuses the payment, the reason appears in the sheet under the field it
 What the app hears from the sheet, in order:
 
 1. `onPresented` runs once the sheet is on screen. Before that the SDK fetches the bank list and merchant name, so there is a short gap after the call.
-2. `onPaymentStarted` runs each time the payer's details pass the sheet's checks and go to SYNQT, whether the payer tapped Pay or the sheet paid straight away. From here `payin.status()` has something to report; until then SYNQT answers HTTP 410 for the payin ID. If SYNQT refuses the details there may still be no payin, and a corrected retry runs it again.
+2. `onPaymentStarted` runs each time the payer's details pass the sheet's checks and go to SYNQT, whether the payer tapped Pay or the sheet paid straight away. From here `api.getPayin(idPayin:)` has something to report; until then SYNQT answers HTTP 410 for the payin ID. If SYNQT refuses the details there may still be no payin, and a corrected retry runs it again.
 3. The call returns once the sheet has closed: nil if the payer closed it without paying, otherwise the result.
 
-Cancelling the task that called `presentPaymentSheet` closes the sheet and returns nil, even if SYNQT already accepted the payment, so check `payin.status()` after a cancel.
+Cancelling the task that called `presentPaymentSheet` closes the sheet and returns nil, even if SYNQT already accepted the payment, so check `api.getPayin(idPayin:)` after a cancel.
 
 ## Other ways to pay
 
-**Build the payment method yourself.** Every method is a case of `PaymentMethod` with its own struct, and its required fields must be set or the code won't compile. Types that every method uses, such as `PaymentMethod.Account` and `PaymentMethod.PersonName`, are one type shared by all methods, so `create` checks the parts the method needs before sending and throws `SynqtArgumentError` naming the missing or unexpected field:
+**Call the API yourself.** `IncomingPaymentsApi` works like the Carpentum Java SDK's: one instance per token, `createPayin(idPayin:payin:)` with the whole request, and SYNQT's full response back. Every method is a case of `PaymentMethodPayin` holding a struct named as in SYNQT's spec, such as `.capitecPay(CapitecPayMethod)`, and its required fields must be set or the code won't compile. Types that every method uses, such as `PaymentMethodPayin.Account` and `PaymentMethodPayin.PersonName`, are one type shared by all methods, so `createPayin` checks the parts the method needs before sending and throws `SynqtArgumentError` naming the missing or unexpected field:
 
 ```swift
-let result = try await payin.create(.capitecPay(.init(
-    phoneNumber: "0821234567",
-    customerName: .init(lastName: "Doe")
-)))
+let accepted = try await api.createPayin(idPayin: response.payinID, payin: Payin(
+    paymentRequested: PaymentRequested(money: money),
+    paymentMethod: .capitecPay(.init(
+        phoneNumber: "0821234567",
+        customerName: .init(lastName: "Doe")
+    )),
+    returnUrl: "https://shop.example.com/payment/return",
+    callbackUrl: "https://shop.example.com/synqt/callback"
+))
+let next = accepted.nextStep() // the QR code, app link, amount, reference and expiry to show
 ```
 
-Retrying `create` after a network failure is safe: if SYNQT already has the payin, the SDK fetches it instead of creating another.
+Retrying `createPayin` after a network failure is safe: if SYNQT already has the payin, the SDK fetches it instead of creating another.
 
 **Use SYNQT's hosted Payment Web App** when you don't want any payment UI in the app:
 
 ```swift
-let result = await payin.presentPaymentApp(from: viewController, merchantCode: "MID",
+let result = await checkout.presentPaymentApp(from: viewController, merchantCode: "MID",
                                            paymentMethodCode: "CAPITEC_PAY",          // optional: open on this method
                                            prefill: ["phoneNumber": "+27821234567"], // optional: the payer can still edit it
                                            onPresented: { /* the Payment Web App is on screen */ })
@@ -188,16 +199,16 @@ switch result {
 case .returned(let url): break // the Payment Web App sent the payer to returnURL; url carries what it added
 case .closed: break            // the payer closed it first
 }
-let status = try await payin.status() // either way, ask where the payment stands
+let detail = try await api.getPayin(idPayin: checkout.id) // either way, ask where the payment stands
 ```
 
 `presentPaymentApp` shows the Payment Web App full screen in the app, with a Close button, and returns when the payer reaches `returnURL` (same host and path, any query) or taps Close. Links to bank and payment apps open outside it. To use Safari instead, `openPaymentApp(merchantCode:)` returns once Safari has the page; the payer then comes back through `returnURL`, which must be a universal link your app handles. The `returnURL` must be https either way.
 
-`paymentMethodCode` opens the Payment Web App on that method (use one `availablePaymentOptions` returns), and the payer can still pick another. `prefill` uses the Payment Web App's parameter names, not the sheet's field paths: `phoneNumber`, `emailAddress`, `accountName`, `accountNumber`, `upiId`, `idCustomer`, `governmentId`, `passportNumber`, `postalCode`, `city`, `district`. The payer can still change prefilled details. The SDK does not check these values; a wrong code or value shows up in the Payment Web App. To lock the method or the details instead, leave these out and pass the raw parameters in `extra`.
+`paymentMethodCode` opens the Payment Web App on that method (use one `payinAvailablePaymentOptions` returns), and the payer can still pick another. `prefill` uses the Payment Web App's parameter names, not the sheet's field paths: `phoneNumber`, `emailAddress`, `accountName`, `accountNumber`, `upiId`, `idCustomer`, `governmentId`, `passportNumber`, `postalCode`, `city`, `district`. The payer can still change prefilled details. The SDK does not check these values; a wrong code or value shows up in the Payment Web App. To lock the method or the details instead, leave these out and pass the raw parameters in `extra`.
 
 ## API reference
 
-Everything a merchant's app uses, in the order an integration uses it. Each call needs a token that allows its SYNQT operation: a `PAYIN_CREATE` token covers creating the payin, its payment options and its status, while `paymentOperators` and the merchant name in the sheet need operations your backend adds when it mints the token.
+Everything a merchant's app uses, in the order an integration uses it. Each call needs a token that allows its SYNQT operation: a `PAYIN_CREATE` token covers creating the payin, its payment options and its status (`getPayin`), while `paymentOperators` and the merchant name in the sheet need operations your backend adds when it mints the token.
 
 ### 1. Set up
 
@@ -206,9 +217,10 @@ Everything a merchant's app uses, in the order an integration uses it. Each call
 | `Synqt(_ environment:, session: = .shared)` | The entry point for one environment. Pass your own `URLSession` to control timeouts or proxies. |
 | `Synqt.Environment` | `.sandbox`, `.live` or `.stable` (see the table below). |
 | `environment.apiBaseURL`, `environment.paymentAppBaseURL` | The base URLs, for your backend's own calls such as minting tokens. |
-| `synqt.payin(token:payinID:money:returnURL:callbackURL:)` | One order's `Payin`. `payinID` is your own order ID (letters, digits, `_` and `-`, at most 250) and must match the token. Throws `SynqtArgumentError` for a malformed ID. |
-| `Money(amount:currencyCode:)` | An amount as a `Decimal`, never rounded. Its `description` is the house format, such as `R1,250.00`. |
-| `payin.id`, `payin.money` | The order's payin ID and amount. |
+| `synqt.checkout(token:payinID:money:returnURL:callbackURL: = nil)` | One order's `PayinCheckout`, for the payment sheet and the Payment Web App. `payinID` is your own order ID (letters, digits, `_` and `-`, at most 250) and must match the token. Throws `SynqtArgumentError` for a malformed ID or a `returnURL` that isn't https. |
+| `IncomingPaymentsApi(synqt:accessToken:)` | SYNQT's payin calls for one token, as in the Carpentum Java SDK. |
+| `MoneyPaymentRequested(amount:currencyCode:)` | An amount as a `Decimal`, never rounded. `format()` gives the house format, such as `R1,250.00`. |
+| `checkout.id`, `checkout.money` | The order's payin ID and amount. |
 
 | Environment | API | Use |
 |---|---|---|
@@ -220,12 +232,12 @@ Everything a merchant's app uses, in the order an integration uses it. Each call
 
 | Type or call | What it does |
 |---|---|
-| `payin.availablePaymentOptions(segmentCode: = nil)` | `[PaymentOption]`: the methods SYNQT allows for this merchant and amount. |
-| `PaymentOption` | `code`, `operators` (its banks or providers), `segmentCode`, and `name`, the payer-facing name (nil for methods the sheet doesn't support). |
+| `api.payinAvailablePaymentOptions(_ paymentRequested:)` | `AvailablePayinOptionList`: in `data`, the methods SYNQT allows for this merchant and amount. Send the same `segmentCode` in `PaymentRequested` when paying. |
+| `AvailablePayinOption` | `paymentMethodCode`, `paymentOperators` (its banks or providers), `segmentCode`, and `name`, the payer-facing name (nil for methods the sheet doesn't support). |
 | `Synqt.directPaymentMethods` | `[DirectPaymentMethod]`: the methods the sheet can collect details for, each with `code` and `name`. |
-| `synqt.paymentOperators(token:)` | `[PaymentOperator]`: every bank and provider SYNQT knows, each with `code`, `name` and `externalProviders`. |
+| `synqt.paymentOperators(token:)` | `[PaymentOperatorIncoming]`: every bank and provider SYNQT knows, each with `code`, `name` and `externalProviders`. |
 
-`paymentOperators` is not tied to a payin, and a `PAYIN_CREATE` token cannot call it. Your backend mints a token with `POST /auth-tokens` and the operation `GET /payment-operators`. It lists the whole system; to see what one merchant can use for a given amount, use `availablePaymentOptions`.
+`paymentOperators` is not tied to a payin, and a `PAYIN_CREATE` token cannot call it. Your backend mints a token with `POST /auth-tokens` and the operation `GET /payment-operators`. It lists the whole system; to see what one merchant can use for a given amount, use `payinAvailablePaymentOptions`.
 
 ### 3. Take the payment
 
@@ -233,33 +245,35 @@ Pick one of three ways.
 
 | Type or call | What it does |
 |---|---|
-| `payin.presentPaymentSheet(from:paymentMethodCode:prefill:customerIP:onPresented:onPaymentStarted:)` | The Synqt payment sheet. Returns `CreatePayinResult?` once it has closed: nil when the payer closed it without paying. See [The payment sheet](#the-payment-sheet). |
-| `payin.create(_ paymentMethod:, customerIP: = nil)` | Your own UI: send a `PaymentMethod` you built. Returns `CreatePayinResult`. |
-| `PaymentMethod` | One case per method (`.capitecPay(...)`, `.zapperQr(...)` and the rest), each with its own struct of fields, following SYNQT's spec. |
-| `payin.presentPaymentApp(from:merchantCode:paymentMethodCode:prefill:extra:onPresented:)` | SYNQT's hosted Payment Web App, inside your app. Returns `PaymentAppResult` once it has closed. |
+| `checkout.presentPaymentSheet(from:paymentMethodCode:prefill:customerIP:onPresented:onPaymentStarted:)` | The Synqt payment sheet. Returns `PayinAcceptedResponse?` once it has closed: nil when the payer closed it without paying. See [The payment sheet](#the-payment-sheet). |
+| `api.createPayin(idPayin:payin:)` | Your own UI: send a `Payin` (`paymentRequested`, `paymentMethod`, `returnUrl`, and optionally `callbackUrl` and `customerIp`). Returns `PayinAcceptedResponse`. |
+| `PaymentMethodPayin` | One case per method (`.capitecPay(CapitecPayMethod)`, `.zapperQr(ZapperQrMethod)` and the rest), each with its own struct of fields, following SYNQT's spec. |
+| `checkout.presentPaymentApp(from:merchantCode:paymentMethodCode:prefill:extra:onPresented:)` | SYNQT's hosted Payment Web App, inside your app. Returns `PaymentAppResult` once it has closed. |
 | `PaymentAppResult` | `.returned(URL)`: the payer reached `returnURL`, with whatever the Payment Web App added to it. `.closed`: the payer tapped Close, or the task was cancelled. |
-| `payin.openPaymentApp(merchantCode:paymentMethodCode:prefill:extra:)` | The Payment Web App in Safari. Returns once Safari has it; the payer comes back through `returnURL` as a universal link. |
-| `payin.paymentAppURL(merchantCode:paymentMethodCode:prefill:extra:)` | The Payment Web App's URL, for a web view of your own. |
+| `checkout.openPaymentApp(merchantCode:paymentMethodCode:prefill:extra:)` | The Payment Web App in Safari. Returns once Safari has it; the payer comes back through `returnURL` as a universal link. |
+| `checkout.paymentAppURL(merchantCode:paymentMethodCode:prefill:extra:)` | The Payment Web App's URL, for a web view of your own. |
 
-`customerIP` is checked against the merchant's IP allow and deny lists, so pass the payer's real IP if you have it. `paymentMethodCode` and `prefill` preselect a method and details the payer can still change; `extra` adds any other Payment Web App parameter as given.
+`customerIP` (`customerIp` in a `Payin`) is checked against the merchant's IP allow and deny lists, so pass the payer's real IP if you have it. `paymentMethodCode` and `prefill` preselect a method and details the payer can still change; `extra` adds any other Payment Web App parameter as given.
 
 ### 4. After the payment is created
 
 | Type or call | What it does |
 |---|---|
-| `CreatePayinResult.redirect(httpMethod:url:formData:)` | Send the payer to `url`. GET: open it. POST: submit `formData` to it, for example in a `WKWebView`. |
-| `CreatePayinResult.instructions(paymentMethod:nextStep:)` | The payer finishes elsewhere. `paymentMethod` is SYNQT's full `PaymentMethodResponse`; `nextStep` gathers what to show. The sheet already shows it. |
+| `PayinAcceptedResponse` | `.methodResponse(PayinAcceptedMethodResponse)` with `paymentRequested` and `paymentMethodResponse` (SYNQT's full `PaymentMethodResponsePayin`), or `.redirectResponse(PayinAcceptedRedirectResponse)` with `paymentRequested` and `redirectTo`, chosen by which one SYNQT sent. |
+| `accepted.redirect()` | A `Redirection` (`method`, `url`, and `formData()`) when the payer goes to another page: SYNQT's `redirectTo`, or a card's 3-D Secure page. GET: open `url`. POST: submit `formData()` to it, for example in a `WKWebView`. |
+| `accepted.nextStep()`, `paymentMethodResponse.nextStep()` | The `NextStep` to show when the payer finishes elsewhere. The sheet already shows it. |
 | `NextStep` | `appLink` (open on this phone), `qrCodeImageURL` (a temporary image link) or `qrCodeData` (draw your own), `amountToPay` (if set, the payer must pay exactly this), `reference`, `expiresAt` (ISO 8601) and `payInto` (Pay offline: the account to transfer to, with `accountName`, `accountNumber`, `accountType`, `bankName`, `bankCode` and `bankBranch`). |
-| `payin.setExternalReference(_:)` | Sends the payer's bank or UTR reference, for methods that need it. |
+| `api.setPayinExternalReference(idPayin:reference:)` | Sends the payer's bank or UTR reference, for methods that need it. |
 
 ### 5. Check the outcome
 
 | Type or call | What it does |
 |---|---|
-| `payin.status()` | `PayinStatus` for this payin, at any time once a payment has been sent. HTTP 410 means SYNQT has no payin with this ID yet. |
-| `PayinStatus` | `status`, `requested`, `fee`, `isTest`, `failureReason`, `paymentMethod` (a `PaymentMethodResponse`), `createdAt` and `processedAt`. |
-| `PayinStatus.Status` | `.processing`, `.success`, `.failed`, `.refused`, or `.unknown` for a status this SDK version doesn't know (treat it like processing). `isFinal` is true for success, failed and refused. |
-| `FailureReason` | `code`, `message` (written for the merchant), `failedAt`, and `payerMessage`, the wording to show the payer. |
+| `api.getPayin(idPayin:)` | `PayinDetail` for this payin, at any time once a payment has been sent. HTTP 410 means SYNQT has no payin with this ID yet. |
+| `PayinDetail` | `paymentRequested`, `process` (`status`, `failureReasons`, `isTest`, `createdAt`, `processedAt`), `fee`, `paymentMethodResponse`, `settlement` and `customer`. `isFinal` is true for SUCCESS, FAILED and REFUSED. |
+| `PaymentStatus` | The four known statuses as strings: `.processing`, `.success`, `.failed` and `.refused`. A status SYNQT adds later still parses; treat it like processing. |
+| `FailureReasons` | `failureReasonCode`, `message` (written for the merchant), `failedAt`, and `payerMessage`, the wording to show the payer. |
+| `api.getPayinAccounts(idPayin:)` | `PaymentAccountDetail`: the payer's account as entered and as the payment used it. The token must allow `GET /payins/{id}/accounts`. |
 
 The app's view of the status is for display only. SYNQT calls your `callbackURL` on every status change, and only your backend's own `GET /payins/{id}` decides that an order is paid.
 
@@ -273,11 +287,29 @@ The app's view of the status is for display only. SYNQT calls your `callbackURL`
 
 `SynqtAPIError` never contains the raw response, because SYNQT echoes what the payer typed in it.
 
-A payment method response that doesn't fit its model (a field of an unexpected type) reads as `.unknown(paymentMethodCode:)` rather than failing, so a payin SYNQT has created never surfaces as an error; `nextStep` is read separately and still works.
+Statuses and codes are strings, so a value SYNQT adds later never breaks parsing. A payment method this SDK version doesn't know yet, or one whose response doesn't fit its model (a field of an unexpected type), reads as `.unknown(paymentMethodCode:json:)` with its JSON rather than failing, so a payin SYNQT has created never surfaces as an error; its `nextStep()` still works.
 
-A payin ID can be used once. Calling `create` again with the same ID is a safe retry and returns the existing payin, but only for the same payment method. If the ID was already used with another method, `create` throws `SynqtAPIError` with HTTP 409 and the code `PAYIN_ALREADY_STARTED`, and the sheet tells the payer to start a new payment. Use a new payin ID and token for each attempt.
+A payin ID can be used once. Calling `createPayin` again with the same ID is a safe retry and returns the existing payin, but only for the same payment method. If the ID was already used with another method, `createPayin` throws `SynqtAPIError` with HTTP 409 and the code `PAYIN_ALREADY_STARTED`, and the sheet tells the payer to start a new payment. Use a new payin ID and token for each attempt.
 
-### 7. Match your own screens (optional)
+### 7. Coming from the Carpentum Java SDK
+
+The API calls and models match the Java SDK's, with Swift's own idioms: structs with an initialiser instead of builders, optionals instead of `Optional`, an enum with a case per payment method, and `async` calls.
+
+| Java SDK | This SDK |
+|---|---|
+| `IncomingPaymentsApi.create(context, token)` | `IncomingPaymentsApi(synqt: Synqt(environment), accessToken: token)` (the token comes from your backend; there is no `PaymentContext` or secret in an app) |
+| `payinAvailablePaymentOptions(PaymentRequested)` | `payinAvailablePaymentOptions(_:)`, returning `AvailablePayinOptionList` |
+| `createPayin(idPayin, Payin)` | `createPayin(idPayin:payin:)`, returning `PayinAcceptedResponse` |
+| `getPayin(idPayin)`, `getPayinAccounts(idPayin)` | `getPayin(idPayin:)` and `getPayinAccounts(idPayin:)`, returning `PayinDetail` and `PaymentAccountDetail` |
+| `setPayinExternalReference(idPayin, reference)` | `setPayinExternalReference(idPayin:reference:)` |
+| `CapitecPayMethod.builder()...build()` | `PaymentMethodPayin.capitecPay(.init(...))`, holding a `PaymentMethodPayin.CapitecPayMethod` |
+| `PayinAcceptedMethodResponse` and `PayinAcceptedRedirectResponse`, subtypes of `PayinAcceptedResponse` | the cases `.methodResponse` and `.redirectResponse` of the enum `PayinAcceptedResponse` |
+| `AccountPayinRequestCapitecPay`, `PersonNameOffline` and other per-method variants | one shared `PaymentMethodPayin.Account` and `PaymentMethodPayin.PersonName`, checked per method |
+| `ResponseException` and its subclasses | `SynqtAPIError` (`httpCode`, `errors`), `SynqtArgumentError` and `URLError` |
+
+Unlike the Java SDK, this SDK checks lengths and formats before sending, retries a payin it already created after a 409, and parses a payment method it doesn't know as `.unknown` instead of failing.
+
+### 8. Match your own screens (optional)
 
 The building blocks the sheet uses are public SwiftUI views for apps that want their screens to match. The fonts register themselves; nothing goes in your Info.plist.
 
@@ -303,16 +335,16 @@ The keys are the Android SDK's string resource names, so one translation can ser
 ## Security and compliance
 
 - Never put the merchant's private key or secret key in an app. Tokens come from your backend, one per order, locked to the amount.
-- Only your backend's own status check proves a payment. The return URL, the sheet closing and `payin.status()` do not.
+- Only your backend's own status check proves a payment. The return URL, the sheet closing and `api.getPayin` in the app do not.
 - This SDK has no card code. CARD is offered only with the separate card add-on, for PCI DSS compliant merchants, which draws, checks and encrypts the card fields itself. The add-on uses this SDK's add-on API (Swift SPI `SynqtAddon`), which apps never need.
 - The SDK ships an Apple privacy manifest (`Sources/SynqtSDK/Resources/PrivacyInfo.xcprivacy`) declaring the payer details it sends to SYNQT; Xcode adds it to your app's privacy report.
 - Payment details include personal information (ID numbers, account numbers, phone numbers, emails) covered by POPIA. Don't log requests, responses or `SynqtAPIError` descriptions alongside customer data.
 
 ## Payment method models and the SYNQT API version
 
-The payment method models (`PaymentMethods.swift`), the sheet's fields (`MethodFormData.swift`), all of the sheet's text (`SynqtForm.strings` and `Synqt.strings`), the colours (`UI/SynqtColors.swift`) and the shared field test cases (`FieldCasesTests.swift`) are generated from SYNQT's OpenAPI spec and SYNQT's shared tables. CARD's raw card number fields are left out of this SDK, as they put the app in PCI DSS scope; only the card add-on has them.
+The payin models (`PayinModels.swift`: `Payin`, `PayinAcceptedResponse`, `PayinDetail` and the rest, named as in SYNQT's spec and the Carpentum Java SDK), the payment method models (`PaymentMethods.swift`), the sheet's fields (`MethodFormData.swift`), all of the sheet's text (`SynqtForm.strings` and `Synqt.strings`), the colours (`UI/SynqtColors.swift`) and the shared field test cases (`FieldCasesTests.swift`) are generated from SYNQT's OpenAPI spec and SYNQT's shared tables. CARD's raw card number fields are left out of this SDK, as they put the app in PCI DSS scope; only the card add-on has them.
 
-They follow SYNQT API 2.84 today, and the spec lives with the generator app. A new SYNQT API version updates these three files in one commit, and every SYNQT SDK moves to the same version together, so they all ask payers for the same things in the same words.
+They follow SYNQT API 2.84 today, and the spec lives with the generator app. A new SYNQT API version updates these files in one commit, and every SYNQT SDK moves to the same version together, so they all ask payers for the same things in the same words.
 
 The Android README describes the South African mandatory fields, the "at least one of" tiles and the ID or passport question.
 
@@ -322,8 +354,8 @@ One module, `SynqtSDK`, with its sources grouped by feature under `Sources/Synqt
 
 | Folder | What it holds |
 |---|---|
-| `Client/` | The entry points apps call (`Synqt`, `Payin`), the Payment Web App presenter, and the parsing of SYNQT's responses. |
-| `Models/` | The public types apps read and send: `PaymentMethod` and `PaymentMethodResponse`, the payin results (`Money`, `NextStep`, `PayinStatus` and the rest), and the error types. |
+| `Client/` | The entry points apps call (`Synqt`, `IncomingPaymentsApi`, `PayinCheckout`), the Payment Web App presenter, and the reading of SYNQT's errors. |
+| `Models/` | The public types apps read and send: `PaymentMethodPayin` and `PaymentMethodResponsePayin`, the payin request and responses (`Payin`, `PayinAcceptedResponse`, `PayinDetail` and the rest), their helpers (`NextStep`, `PaymentStatus`), and the error types. |
 | `PaymentSheet/` | The sheet's form definitions and their data, its state (`PaymentSheetModel`), its SwiftUI views, and the UIKit presenter. |
 | `UI/` | The public Synqt-styled components and theme, icons and the loader. |
 | `Support/` | Internal helpers: the JSON reader and localized string lookup. |
@@ -343,4 +375,4 @@ This SDK is licensed under the Apache License 2.0; see `LICENSE` and `NOTICE`. T
 
 ## Status
 
-Built with Xcode 27.1 for the iOS Simulator with no warnings, and the test suite passes on it (58 tests). The package declares Swift tools 5.9, so it builds in Swift 5 language mode by default; forced into Swift 6 language mode (`SWIFT_VERSION=6`) it and the card add-on also build for the iOS Simulator without errors or warnings. The sheet has been opened in the Simulator from the demo app, in light and dark, with a placeholder token.
+Built with Xcode 27.1 for the iOS Simulator with no warnings, and the test suite passes on it. The package declares Swift tools 5.9, so it builds in Swift 5 language mode by default; forced into Swift 6 language mode (`SWIFT_VERSION=6`) it and the card add-on also build for the iOS Simulator without errors or warnings. The sheet has been opened in the Simulator from the demo app, in light and dark, with a placeholder token.

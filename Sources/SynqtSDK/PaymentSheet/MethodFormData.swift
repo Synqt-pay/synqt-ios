@@ -1,4 +1,4 @@
-/// One entry per direct API payment method a payer can fill in, shown by `Payin.presentPaymentSheet`.
+/// One entry per direct API payment method a payer can fill in, shown by `PayinCheckout.presentPaymentSheet`.
 let methodForms: [MethodForm] = [
     MethodForm("ABSA_PAY", "synqt_absa_pay", [
         FormField("emailAddress", "synqt_email_address_optional", .email, required: false, invalid: "synqt_enter_a_valid_email_address"),
@@ -12,9 +12,9 @@ let methodForms: [MethodForm] = [
         FormField("customerName.lastName", "synqt_last_name", .text, required: true, section: "synqt_your_name"),
         FormField("customerName.titleAfter", "synqt_name_suffix_optional", .text, required: false, section: "synqt_your_name"),
     ], oneOfs: [OneOf("synqt_how_do_you_want_to_confirm_it_s_you", [Choice("synqt_bank_account", ["account.accountNumber", "account.accountName"]), Choice("synqt_south_african_id_number", ["said"]), Choice("synqt_passport_number", ["passportNumber"])])]) { values in
-        try .absaPay(PaymentMethod.AbsaPay(
+        try .absaPay(PaymentMethodPayin.AbsaPayMethod(
             account: values.group("account") {
-                PaymentMethod.Account(
+                PaymentMethodPayin.Account(
                     accountName: values.str("account.accountName"),
                     accountNumber: values.str("account.accountNumber")
                 )
@@ -22,7 +22,7 @@ let methodForms: [MethodForm] = [
             emailAddress: values.str("emailAddress"),
             passportNumber: values.str("passportNumber"),
             said: values.str("said"),
-            customerName: PaymentMethod.PersonName(
+            customerName: PaymentMethodPayin.PersonName(
                 titleBefore: values.str("customerName.titleBefore"),
                 firstName: values.str("customerName.firstName"),
                 middleName: values.str("customerName.middleName"),
@@ -44,9 +44,9 @@ let methodForms: [MethodForm] = [
         FormField("customerName.lastName", "synqt_last_name", .text, required: true, section: "synqt_your_name"),
         FormField("customerName.titleAfter", "synqt_name_suffix_optional", .text, required: false, section: "synqt_your_name"),
     ], oneOfs: [OneOf("synqt_how_do_you_want_to_confirm_it_s_you", [Choice("synqt_bank_account", ["account.accountNumber", "account.accountName"]), Choice("synqt_mobile_number", ["phoneNumber"]), Choice("synqt_south_african_id_number", ["said"])])]) { values in
-        try .capitecPay(PaymentMethod.CapitecPay(
+        try .capitecPay(PaymentMethodPayin.CapitecPayMethod(
             account: values.group("account") {
-                PaymentMethod.Account(
+                PaymentMethodPayin.Account(
                     accountName: values.str("account.accountName"),
                     accountNumber: values.str("account.accountNumber")
                 )
@@ -54,7 +54,7 @@ let methodForms: [MethodForm] = [
             emailAddress: values.str("emailAddress"),
             phoneNumber: values.str("phoneNumber"),
             said: values.str("said"),
-            customerName: PaymentMethod.PersonName(
+            customerName: PaymentMethodPayin.PersonName(
                 titleBefore: values.str("customerName.titleBefore"),
                 firstName: values.str("customerName.firstName"),
                 middleName: values.str("customerName.middleName"),
@@ -73,16 +73,16 @@ let methodForms: [MethodForm] = [
         FormField("paymentLocation.city", "synqt_city", .text, required: true, section: "synqt_where_you_are_paying"),
         FormField("paymentLocation.district", "synqt_district", .text, required: true, section: "synqt_where_you_are_paying"),
     ]) { values in
-        try .codePayment(PaymentMethod.CodePayment(
+        try .codePayment(PaymentMethodPayin.CodePaymentMethod(
             paymentOperatorCode: values.req("paymentOperatorCode"),
             emailAddress: values.req("emailAddress"),
             phoneNumber: values.req("phoneNumber"),
-            paymentLocation: PaymentMethod.PaymentLocation(
+            paymentLocation: PaymentMethodPayin.PaymentLocation(
                 postalCode: values.req("paymentLocation.postalCode"),
                 city: values.req("paymentLocation.city"),
                 district: values.req("paymentLocation.district")
             ),
-            account: PaymentMethod.Account(
+            account: PaymentMethodPayin.Account(
                 accountName: values.req("account.accountName")
             )
         ))
@@ -91,7 +91,7 @@ let methodForms: [MethodForm] = [
         FormField("paymentOperatorCode", "synqt_bank_or_provider", .operator, required: true, maxLength: 30, pattern: #"^[A-Za-z0-9_-]+$"#, invalid: "synqt_use_letters_numbers_and_only"),
         FormField("emailAddress", "synqt_email_address_optional", .email, required: false, invalid: "synqt_enter_a_valid_email_address"),
     ]) { values in
-        try .cryptoOffline(PaymentMethod.CryptoOffline(
+        try .cryptoOffline(PaymentMethodPayin.CryptoOfflineMethod(
             paymentOperatorCode: values.req("paymentOperatorCode"),
             emailAddress: values.str("emailAddress")
         ))
@@ -102,8 +102,8 @@ let methodForms: [MethodForm] = [
         FormField("account.accountName", "synqt_account_holder_name", .text, required: true, section: "synqt_bank_account", maxLength: 64, pattern: #"^(\p{L}\p{M}*?|[\d, ;:_'"!%=@#&\-\.\?\$\(\)\+\*\|])*$"#, invalid: "synqt_use_letters_numbers_spaces_and_common_punctuatio"),
         FormField("account.accountNumber", "synqt_account_number_optional", .text, required: false, section: "synqt_bank_account"),
     ]) { values in
-        try .duitNow(PaymentMethod.DuitNow(
-            account: PaymentMethod.Account(
+        try .duitNow(PaymentMethodPayin.DuitNowMethod(
+            account: PaymentMethodPayin.Account(
                 accountName: values.req("account.accountName"),
                 accountNumber: values.str("account.accountNumber")
             ),
@@ -117,10 +117,10 @@ let methodForms: [MethodForm] = [
         FormField("phoneNumber", "synqt_mobile_number_optional", .phone, required: false, placeholder: "synqt_27821234567", minLength: 7, maxLength: 16, pattern: #"^\+?[0-9]+$"#, invalid: "synqt_enter_the_number_with_your_country_code_and_no_s"),
         FormField("account.accountName", "synqt_account_holder_name_optional", .text, required: false, section: "synqt_bank_account_optional", maxLength: 64, pattern: #"^(\p{L}\p{M}*?|[\d, ;:_'"!%=@#&\-\.\?\$\(\)\+\*\|])*$"#, invalid: "synqt_use_letters_numbers_spaces_and_common_punctuatio"),
     ]) { values in
-        try .eWallet(PaymentMethod.EWallet(
+        try .eWallet(PaymentMethodPayin.EWalletMethod(
             paymentOperatorCode: values.req("paymentOperatorCode"),
             account: values.group("account") {
-                PaymentMethod.Account(
+                PaymentMethodPayin.Account(
                     accountName: values.str("account.accountName")
                 )
             },
@@ -136,13 +136,13 @@ let methodForms: [MethodForm] = [
         FormField("customerName.lastName", "synqt_last_name", .text, required: true, section: "synqt_your_name"),
         FormField("account.accountNumber", "synqt_account_number", .text, required: true, section: "synqt_bank_account"),
     ], oneOfs: [OneOf("synqt_how_do_you_want_to_confirm_it_s_you", [Choice("synqt_south_african_id_number", ["said"]), Choice("synqt_passport_number", ["passportNumber"])])]) { values in
-        try .fnbDirectEFT(PaymentMethod.FnbDirectEFT(
-            customerName: PaymentMethod.PersonName(
+        try .fnbDirectEFT(PaymentMethodPayin.FnbDirectEFTMethod(
+            customerName: PaymentMethodPayin.PersonName(
                 firstName: values.req("customerName.firstName"),
                 lastName: values.req("customerName.lastName")
             ),
             emailAddress: values.req("emailAddress"),
-            account: PaymentMethod.Account(
+            account: PaymentMethodPayin.Account(
                 accountNumber: values.req("account.accountNumber")
             ),
             passportNumber: values.str("passportNumber"),
@@ -155,8 +155,8 @@ let methodForms: [MethodForm] = [
         FormField("account.accountName", "synqt_account_holder_name", .text, required: true, section: "synqt_bank_account", maxLength: 64, pattern: #"^(\p{L}\p{M}*?|[\d, ;:_'"!%=@#&\-\.\?\$\(\)\+\*\|])*$"#, invalid: "synqt_use_letters_numbers_spaces_and_common_punctuatio"),
         FormField("account.accountType", "synqt_account_type", .choice, required: true, section: "synqt_bank_account", options: [("savings", "synqt_savings"), ("current", "synqt_current"), ("corporate", "synqt_corporate")]),
     ]) { values in
-        try .fpx(PaymentMethod.Fpx(
-            account: PaymentMethod.Account(
+        try .fpx(PaymentMethodPayin.FpxMethod(
+            account: PaymentMethodPayin.Account(
                 accountName: values.req("account.accountName"),
                 accountType: values.req("account.accountType")
             ),
@@ -169,8 +169,8 @@ let methodForms: [MethodForm] = [
         FormField("account.accountName", "synqt_account_holder_name", .text, required: true, section: "synqt_bank_account", maxLength: 64, pattern: #"^(\p{L}\p{M}*?|[\d, ;:_'"!%=@#&\-\.\?\$\(\)\+\*\|])*$"#, invalid: "synqt_use_letters_numbers_spaces_and_common_punctuatio"),
         FormField("account.accountNumber", "synqt_account_number_optional", .text, required: false, section: "synqt_bank_account"),
     ]) { values in
-        try .imps(PaymentMethod.IMPS(
-            account: PaymentMethod.Account(
+        try .imps(PaymentMethodPayin.IMPSMethod(
+            account: PaymentMethodPayin.Account(
                 accountName: values.req("account.accountName"),
                 accountNumber: values.str("account.accountNumber")
             ),
@@ -183,8 +183,8 @@ let methodForms: [MethodForm] = [
         FormField("phoneNumber", "synqt_mobile_number", .phone, required: true, placeholder: "synqt_27821234567", minLength: 7, maxLength: 16, pattern: #"^\+?[0-9]+$"#, invalid: "synqt_enter_the_number_with_your_country_code_and_no_s"),
         FormField("account.accountName", "synqt_account_holder_name", .text, required: true, section: "synqt_bank_account", maxLength: 64, pattern: #"^(\p{L}\p{M}*?|[\d, ;:_'"!%=@#&\-\.\?\$\(\)\+\*\|])*$"#, invalid: "synqt_use_letters_numbers_spaces_and_common_punctuatio"),
     ]) { values in
-        try .mobileMoney(PaymentMethod.MobileMoney(
-            account: PaymentMethod.Account(
+        try .mobileMoney(PaymentMethodPayin.MobileMoneyMethod(
+            account: PaymentMethodPayin.Account(
                 accountName: values.req("account.accountName")
             ),
             phoneNumber: values.req("phoneNumber"),
@@ -195,7 +195,7 @@ let methodForms: [MethodForm] = [
     MethodForm("MOMOPAY", "synqt_momopay", [
         FormField("emailAddress", "synqt_email_address_optional", .email, required: false, invalid: "synqt_enter_a_valid_email_address"),
     ]) { values in
-        .momoPay(PaymentMethod.MomoPay(
+        .momoPay(PaymentMethodPayin.MomoPayMethod(
             emailAddress: values.str("emailAddress")
         ))
     },
@@ -209,13 +209,13 @@ let methodForms: [MethodForm] = [
         FormField("customerName.lastName", "synqt_last_name", .text, required: true, section: "synqt_your_name"),
         FormField("customerName.titleAfter", "synqt_name_suffix_optional", .text, required: false, section: "synqt_your_name"),
     ]) { values in
-        try .nedbankDirectEFT(PaymentMethod.NedbankDirectEFT(
-            account: PaymentMethod.Account(
+        try .nedbankDirectEFT(PaymentMethodPayin.NedbankDirectEFTMethod(
+            account: PaymentMethodPayin.Account(
                 accountName: values.req("account.accountName")
             ),
             said: values.req("said"),
             emailAddress: values.str("emailAddress"),
-            customerName: PaymentMethod.PersonName(
+            customerName: PaymentMethodPayin.PersonName(
                 titleBefore: values.str("customerName.titleBefore"),
                 firstName: values.str("customerName.firstName"),
                 middleName: values.str("customerName.middleName"),
@@ -231,9 +231,9 @@ let methodForms: [MethodForm] = [
         FormField("account.accountName", "synqt_account_holder_name_optional", .text, required: false, section: "synqt_bank_account_optional", maxLength: 64, pattern: #"^(\p{L}\p{M}*?|[\d, ;:_'"!%=@#&\-\.\?\$\(\)\+\*\|])*$"#, invalid: "synqt_use_letters_numbers_spaces_and_common_punctuatio"),
         FormField("account.accountNumber", "synqt_account_number_optional", .text, required: false, section: "synqt_bank_account_optional"),
     ]) { values in
-        .netBanking(PaymentMethod.NetBanking(
+        .netBanking(PaymentMethodPayin.NetBankingMethod(
             account: values.group("account") {
-                PaymentMethod.Account(
+                PaymentMethodPayin.Account(
                     accountName: values.str("account.accountName"),
                     accountNumber: values.str("account.accountNumber")
                 )
@@ -257,9 +257,9 @@ let methodForms: [MethodForm] = [
         FormField("customerName.lastName", "synqt_last_name", .text, required: true, section: "synqt_your_name"),
         FormField("customerName.titleAfter", "synqt_name_suffix_optional", .text, required: false, section: "synqt_your_name"),
     ]) { values in
-        try .offline(PaymentMethod.Offline(
+        try .offline(PaymentMethodPayin.OfflineMethod(
             account: values.group("account") {
-                PaymentMethod.Account(
+                PaymentMethodPayin.Account(
                     accountName: values.str("account.accountName"),
                     accountNumber: values.str("account.accountNumber")
                 )
@@ -269,7 +269,7 @@ let methodForms: [MethodForm] = [
             phoneNumber: values.str("phoneNumber"),
             productId: values.str("productId"),
             taxId: values.str("taxId"),
-            customerName: PaymentMethod.PersonName(
+            customerName: PaymentMethodPayin.PersonName(
                 titleBefore: values.str("customerName.titleBefore"),
                 firstName: values.req("customerName.firstName"),
                 middleName: values.str("customerName.middleName"),
@@ -285,8 +285,8 @@ let methodForms: [MethodForm] = [
         FormField("account.accountNumber", "synqt_account_number", .text, required: true, section: "synqt_bank_account"),
         FormField("account.accountType", "synqt_account_type", .text, required: true, section: "synqt_bank_account", maxLength: 64, pattern: #"^(\p{L}\p{M}*?|[, ;:_'"!%=@#&\-\.\?\$\(\)\+\*\|])*$"#, invalid: "synqt_use_letters_numbers_spaces_and_common_punctuatio"),
     ]) { values in
-        try .online(PaymentMethod.Online(
-            account: PaymentMethod.Account(
+        try .online(PaymentMethodPayin.OnlineMethod(
+            account: PaymentMethodPayin.Account(
                 accountName: values.req("account.accountName"),
                 accountNumber: values.req("account.accountNumber"),
                 accountType: values.req("account.accountType")
@@ -305,11 +305,11 @@ let methodForms: [MethodForm] = [
         FormField("customerName.lastName", "synqt_last_name", .text, required: true, section: "synqt_your_name"),
         FormField("customerName.titleAfter", "synqt_name_suffix_optional", .text, required: false, section: "synqt_your_name"),
     ]) { values in
-        try .ottVoucher(PaymentMethod.OttVoucher(
+        try .ottVoucher(PaymentMethodPayin.OttVoucherMethod(
             voucherPin: values.req("voucherPin"),
             phoneNumber: values.req("phoneNumber"),
             emailAddress: values.req("emailAddress"),
-            customerName: PaymentMethod.PersonName(
+            customerName: PaymentMethodPayin.PersonName(
                 titleBefore: values.str("customerName.titleBefore"),
                 firstName: values.req("customerName.firstName"),
                 middleName: values.str("customerName.middleName"),
@@ -324,10 +324,10 @@ let methodForms: [MethodForm] = [
         FormField("account.accountName", "synqt_account_holder_name_optional", .text, required: false, section: "synqt_bank_account_optional", maxLength: 64, pattern: #"^(\p{L}\p{M}*?|[\d, ;:_'"!%=@#&\-\.\?\$\(\)\+\*\|])*$"#, invalid: "synqt_use_letters_numbers_spaces_and_common_punctuatio"),
         FormField("account.accountNumber", "synqt_account_number_optional", .text, required: false, section: "synqt_bank_account_optional"),
     ]) { values in
-        try .p2AV2(PaymentMethod.P2AV2(
+        try .p2AV2(PaymentMethodPayin.P2AV2Method(
             paymentOperatorCode: values.req("paymentOperatorCode"),
             account: values.group("account") {
-                PaymentMethod.Account(
+                PaymentMethodPayin.Account(
                     accountName: values.str("account.accountName"),
                     accountNumber: values.str("account.accountNumber")
                 )
@@ -350,10 +350,10 @@ let methodForms: [MethodForm] = [
         FormField("customerName.lastName", "synqt_last_name", .text, required: true, section: "synqt_your_name"),
         FormField("customerName.titleAfter", "synqt_name_suffix_optional", .text, required: false, section: "synqt_your_name"),
     ], oneOfs: [OneOf("synqt_how_do_you_want_to_pay", [Choice("synqt_bank_account", ["account.accountNumber", "account.accountName"], required: ["account.accountNumber", "account.accountName"]), Choice("synqt_mobile_number", ["phoneNumber", "externalProviderCode"], required: ["phoneNumber", "externalProviderCode"])]), OneOf("synqt_which_id_do_you_want_to_give", [Choice("synqt_south_african_id_number", ["said"], required: []), Choice("synqt_passport_number", ["passportNumber"], required: [])])]) { values in
-        try .payShap(PaymentMethod.PayShap(
+        try .payShap(PaymentMethodPayin.PayShapMethod(
             paymentOperatorCode: values.req("paymentOperatorCode"),
             account: values.group("account") {
-                PaymentMethod.Account(
+                PaymentMethodPayin.Account(
                     accountName: values.str("account.accountName"),
                     accountNumber: values.str("account.accountNumber")
                 )
@@ -362,7 +362,7 @@ let methodForms: [MethodForm] = [
             emailAddress: values.str("emailAddress"),
             passportNumber: values.str("passportNumber"),
             said: values.str("said"),
-            customerName: PaymentMethod.PersonName(
+            customerName: PaymentMethodPayin.PersonName(
                 titleBefore: values.str("customerName.titleBefore"),
                 firstName: values.str("customerName.firstName"),
                 middleName: values.str("customerName.middleName"),
@@ -378,8 +378,8 @@ let methodForms: [MethodForm] = [
         FormField("account.accountName", "synqt_account_holder_name", .text, required: true, section: "synqt_bank_account", maxLength: 64, pattern: #"^(\p{L}\p{M}*?|[\d, ;:_'"!%=@#&\-\.\?\$\(\)\+\*\|])*$"#, invalid: "synqt_use_letters_numbers_spaces_and_common_punctuatio"),
         FormField("account.accountNumber", "synqt_account_number_optional", .text, required: false, section: "synqt_bank_account"),
     ]) { values in
-        try .payMe(PaymentMethod.PayMe(
-            account: PaymentMethod.Account(
+        try .payMe(PaymentMethodPayin.PayMeMethod(
+            account: PaymentMethodPayin.Account(
                 accountName: values.req("account.accountName"),
                 accountNumber: values.str("account.accountNumber")
             ),
@@ -391,8 +391,8 @@ let methodForms: [MethodForm] = [
         FormField("taxId", "synqt_cpf_or_cnpj", .text, required: true, hint: "synqt_14_characters", minLength: 14, maxLength: 14, invalid: "synqt_enter_your_14_character_cpf_or_cnpj"),
         FormField("account.accountName", "synqt_account_holder_name", .text, required: true, section: "synqt_bank_account", maxLength: 64, pattern: #"^(\p{L}\p{M}*?|[\d, ;:_'"!%=@#&\-\.\?\$\(\)\+\*\|])*$"#, invalid: "synqt_use_letters_numbers_spaces_and_common_punctuatio"),
     ]) { values in
-        try .pixQR(PaymentMethod.PixQR(
-            account: PaymentMethod.Account(
+        try .pixQR(PaymentMethodPayin.PixQRMethod(
+            account: PaymentMethodPayin.Account(
                 accountName: values.req("account.accountName")
             ),
             taxId: values.req("taxId")
@@ -404,8 +404,8 @@ let methodForms: [MethodForm] = [
         FormField("account.accountName", "synqt_account_holder_name_optional", .text, required: false, section: "synqt_bank_account", maxLength: 64, pattern: #"^(\p{L}\p{M}*?|[\d, ;:_'"!%=@#&\-\.\?\$\(\)\+\*\|])*$"#, invalid: "synqt_use_letters_numbers_spaces_and_common_punctuatio"),
         FormField("account.accountNumber", "synqt_account_number", .text, required: true, section: "synqt_bank_account"),
     ]) { values in
-        try .promptPay(PaymentMethod.PromptPay(
-            account: PaymentMethod.Account(
+        try .promptPay(PaymentMethodPayin.PromptPayMethod(
+            account: PaymentMethodPayin.Account(
                 accountName: values.str("account.accountName"),
                 accountNumber: values.req("account.accountNumber")
             ),
@@ -418,8 +418,8 @@ let methodForms: [MethodForm] = [
         FormField("phoneNumber", "synqt_mobile_number", .phone, required: true, placeholder: "synqt_27821234567", minLength: 7, maxLength: 16, pattern: #"^\+?[0-9]+$"#, invalid: "synqt_enter_the_number_with_your_country_code_and_no_s"),
         FormField("account.accountName", "synqt_account_holder_name", .text, required: true, section: "synqt_bank_account", maxLength: 64, pattern: #"^(\p{L}\p{M}*?|[\d, ;:_'"!%=@#&\-\.\?\$\(\)\+\*\|])*$"#, invalid: "synqt_use_letters_numbers_spaces_and_common_punctuatio"),
     ]) { values in
-        try .pse(PaymentMethod.Pse(
-            account: PaymentMethod.Account(
+        try .pse(PaymentMethodPayin.PseMethod(
+            account: PaymentMethodPayin.Account(
                 accountName: values.req("account.accountName")
             ),
             emailAddress: values.req("emailAddress"),
@@ -431,9 +431,9 @@ let methodForms: [MethodForm] = [
         FormField("account.accountName", "synqt_account_holder_name_optional", .text, required: false, section: "synqt_bank_account_optional", maxLength: 64, pattern: #"^(\p{L}\p{M}*?|[\d, ;:_'"!%=@#&\-\.\?\$\(\)\+\*\|])*$"#, invalid: "synqt_use_letters_numbers_spaces_and_common_punctuatio"),
         FormField("account.accountNumber", "synqt_account_number_optional", .text, required: false, section: "synqt_bank_account_optional"),
     ]) { values in
-        .qrisPay(PaymentMethod.QrisPay(
+        .qrisPay(PaymentMethodPayin.QrisPayMethod(
             account: values.group("account") {
-                PaymentMethod.Account(
+                PaymentMethodPayin.Account(
                     accountName: values.str("account.accountName"),
                     accountNumber: values.str("account.accountNumber")
                 )
@@ -448,9 +448,9 @@ let methodForms: [MethodForm] = [
         FormField("account.accountName", "synqt_account_holder_name_optional", .text, required: false, section: "synqt_bank_account_optional", maxLength: 64, pattern: #"^(\p{L}\p{M}*?|[\d, ;:_'"!%=@#&\-\.\?\$\(\)\+\*\|])*$"#, invalid: "synqt_use_letters_numbers_spaces_and_common_punctuatio"),
         FormField("account.accountNumber", "synqt_account_number_optional", .text, required: false, section: "synqt_bank_account_optional"),
     ]) { values in
-        .qrPh(PaymentMethod.QrPh(
+        .qrPh(PaymentMethodPayin.QrPhMethod(
             account: values.group("account") {
-                PaymentMethod.Account(
+                PaymentMethodPayin.Account(
                     accountName: values.str("account.accountName"),
                     accountNumber: values.str("account.accountNumber")
                 )
@@ -468,9 +468,9 @@ let methodForms: [MethodForm] = [
         FormField("customerName.lastName", "synqt_last_name", .text, required: true, section: "synqt_your_name"),
         FormField("customerName.titleAfter", "synqt_name_suffix_optional", .text, required: false, section: "synqt_your_name"),
     ]) { values in
-        try .snapScanQr(PaymentMethod.SnapScanQr(
+        try .snapScanQr(PaymentMethodPayin.SnapScanQrMethod(
             emailAddress: values.req("emailAddress"),
-            customerName: PaymentMethod.PersonName(
+            customerName: PaymentMethodPayin.PersonName(
                 titleBefore: values.str("customerName.titleBefore"),
                 firstName: values.req("customerName.firstName"),
                 middleName: values.str("customerName.middleName"),
@@ -485,8 +485,8 @@ let methodForms: [MethodForm] = [
         FormField("phoneNumber", "synqt_mobile_number", .phone, required: true, placeholder: "synqt_27821234567", minLength: 7, maxLength: 16, pattern: #"^\+?[0-9]+$"#, invalid: "synqt_enter_the_number_with_your_country_code_and_no_s"),
         FormField("account.accountName", "synqt_account_holder_name", .text, required: true, section: "synqt_bank_account", maxLength: 64, pattern: #"^(\p{L}\p{M}*?|[\d, ;:_'"!%=@#&\-\.\?\$\(\)\+\*\|])*$"#, invalid: "synqt_use_letters_numbers_spaces_and_common_punctuatio"),
     ]) { values in
-        try .upiCollect(PaymentMethod.UpiCollect(
-            account: PaymentMethod.Account(
+        try .upiCollect(PaymentMethodPayin.UpiCollectMethod(
+            account: PaymentMethodPayin.Account(
                 accountName: values.req("account.accountName")
             ),
             upiId: values.req("upiId"),
@@ -498,7 +498,7 @@ let methodForms: [MethodForm] = [
         FormField("upiId", "synqt_upi_id", .text, required: true, placeholder: "synqt_name_bank", maxLength: 100, pattern: #"[a-zA-Z0-9_\-\.]+@[a-zA-Z0-9_\.]+"#, invalid: "synqt_enter_a_upi_id_like_name_bank"),
         FormField("emailAddress", "synqt_email_address_optional", .email, required: false, invalid: "synqt_enter_a_valid_email_address"),
     ]) { values in
-        try .upiId(PaymentMethod.UpiId(
+        try .upiId(PaymentMethodPayin.UpiIdMethod(
             upiId: values.req("upiId"),
             emailAddress: values.str("emailAddress")
         ))
@@ -510,9 +510,9 @@ let methodForms: [MethodForm] = [
         FormField("phoneNumber", "synqt_mobile_number_optional", .phone, required: false, placeholder: "synqt_27821234567", minLength: 7, maxLength: 16, pattern: #"^\+?[0-9]+$"#, invalid: "synqt_enter_the_number_with_your_country_code_and_no_s"),
         FormField("account.accountName", "synqt_account_holder_name_optional", .text, required: false, section: "synqt_bank_account_optional", maxLength: 64, pattern: #"^(\p{L}\p{M}*?|[\d, ;:_'"!%=@#&\-\.\?\$\(\)\+\*\|])*$"#, invalid: "synqt_use_letters_numbers_spaces_and_common_punctuatio"),
     ]) { values in
-        .upiQR(PaymentMethod.UpiQR(
+        .upiQR(PaymentMethodPayin.UpiQRMethod(
             account: values.group("account") {
-                PaymentMethod.Account(
+                PaymentMethodPayin.Account(
                     accountName: values.str("account.accountName")
                 )
             },
@@ -532,9 +532,9 @@ let methodForms: [MethodForm] = [
         FormField("paymentLocation.city", "synqt_city", .text, required: true, section: "synqt_where_you_are_paying"),
         FormField("paymentLocation.district", "synqt_district", .text, required: true, section: "synqt_where_you_are_paying"),
     ]) { values in
-        try .vaPay(PaymentMethod.VaPay(
+        try .vaPay(PaymentMethodPayin.VaPayMethod(
             account: values.group("account") {
-                PaymentMethod.Account(
+                PaymentMethodPayin.Account(
                     accountName: values.str("account.accountName"),
                     accountNumber: values.str("account.accountNumber")
                 )
@@ -542,7 +542,7 @@ let methodForms: [MethodForm] = [
             paymentOperatorCode: values.str("paymentOperatorCode"),
             emailAddress: values.str("emailAddress"),
             phoneNumber: values.str("phoneNumber"),
-            paymentLocation: PaymentMethod.PaymentLocation(
+            paymentLocation: PaymentMethodPayin.PaymentLocation(
                 postalCode: values.req("paymentLocation.postalCode"),
                 city: values.req("paymentLocation.city"),
                 district: values.req("paymentLocation.district")
@@ -555,8 +555,8 @@ let methodForms: [MethodForm] = [
         FormField("account.accountName", "synqt_account_holder_name_optional", .text, required: false, section: "synqt_bank_account", maxLength: 64, pattern: #"^(\p{L}\p{M}*?|[\d, ;:_'"!%=@#&\-\.\?\$\(\)\+\*\|])*$"#, invalid: "synqt_use_letters_numbers_spaces_and_common_punctuatio"),
         FormField("account.accountNumber", "synqt_account_number", .number, required: true, hint: "synqt_numbers_only", section: "synqt_bank_account", pattern: #"^[0-9-]*$"#, invalid: "synqt_use_numbers_only"),
     ]) { values in
-        try .vaPayVerif(PaymentMethod.VaPayVerif(
-            account: PaymentMethod.Account(
+        try .vaPayVerif(PaymentMethodPayin.VaPayVerifMethod(
+            account: PaymentMethodPayin.Account(
                 accountName: values.str("account.accountName"),
                 accountNumber: values.req("account.accountNumber")
             ),
@@ -568,7 +568,7 @@ let methodForms: [MethodForm] = [
         FormField("paymentOperatorCode", "synqt_bank_or_provider", .operator, required: true, maxLength: 30, pattern: #"^[A-Za-z0-9_-]+$"#, invalid: "synqt_use_letters_numbers_and_only"),
         FormField("emailAddress", "synqt_email_address_optional", .email, required: false, invalid: "synqt_enter_a_valid_email_address"),
     ]) { values in
-        try .vietQR(PaymentMethod.VietQR(
+        try .vietQR(PaymentMethodPayin.VietQRMethod(
             paymentOperatorCode: values.req("paymentOperatorCode"),
             emailAddress: values.str("emailAddress")
         ))
@@ -578,9 +578,9 @@ let methodForms: [MethodForm] = [
         FormField("customerName.firstName", "synqt_first_name", .text, required: true, section: "synqt_your_name"),
         FormField("customerName.lastName", "synqt_last_name", .text, required: true, section: "synqt_your_name"),
     ]) { values in
-        try .zapperQr(PaymentMethod.ZapperQr(
+        try .zapperQr(PaymentMethodPayin.ZapperQrMethod(
             emailAddress: values.req("emailAddress"),
-            customerName: PaymentMethod.PersonName(
+            customerName: PaymentMethodPayin.PersonName(
                 firstName: values.req("customerName.firstName"),
                 lastName: values.req("customerName.lastName")
             )

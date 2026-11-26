@@ -12,7 +12,6 @@ struct PaymentSummary: Equatable {
 struct SheetAddon {
     let section: any MethodSection
     let secure: Bool
-    let submit: (JSON) async throws -> CreatePayinResult
 }
 
 /**
@@ -26,11 +25,11 @@ final class PaymentSheetModel: ObservableObject {
     let summary: PaymentSummary
     let methodName: String
     private let prefill: [String: String]
-    @Published private(set) var operators: [PaymentOperator]
+    @Published private(set) var operators: [PaymentOperatorIncoming]
     /// SYNQT's list of banks and providers could not be loaded, so a mandatory bank or provider field can't be filled in.
     @Published private(set) var banksFailed: Bool
     @Published private(set) var loadingBanks = false
-    private let submit: (PaymentMethod) async throws -> CreatePayinResult
+    private let submit: (PaymentMethodPayin) async throws -> PayinAcceptedResponse
     /// An add-on method's own fields, which it draws, checks and builds itself; nil for built-in methods.
     let addon: SheetAddon?
     /// The add-on's fields' scroll target.
@@ -58,12 +57,12 @@ final class PaymentSheetModel: ObservableObject {
     private var refused: Set<String> = [] // showing SYNQT's error, kept until the payer edits that field
     private var focused: String?
     /// The payin result once SYNQT accepted it, returned however the payer closes the sheet afterwards.
-    private(set) var accepted: CreatePayinResult?
+    private(set) var accepted: PayinAcceptedResponse?
     private var openedApp = false
     private var finished = false
 
     // Set by the presenter.
-    var onFinish: (CreatePayinResult?) -> Void = { _ in }
+    var onFinish: (PayinAcceptedResponse?) -> Void = { _ in }
     var onPaymentStarted: () -> Void = {}
     /// Opens a link in the method's own app if it is installed; false if nothing took it.
     var openInApp: (String) async -> Bool = { _ in false }
@@ -75,11 +74,11 @@ final class PaymentSheetModel: ObservableObject {
     /// The height the whole sheet needs to show everything without scrolling, for a presenter that can size to it (iPad).
     var fitHeight: (CGFloat) -> Void = { _ in }
     /// Loads the banks and providers again, as the presenter first did; nil if they still could not be loaded.
-    var reloadOperators: () async -> [PaymentOperator]? = { nil }
+    var reloadOperators: () async -> [PaymentOperatorIncoming]? = { nil }
 
     /// `operators` is nil when SYNQT's list could not be loaded.
-    init(form: MethodForm, prefill: [String: String], operators: [PaymentOperator]?, summary: PaymentSummary, addon: SheetAddon? = nil,
-         submit: @escaping (PaymentMethod) async throws -> CreatePayinResult) {
+    init(form: MethodForm, prefill: [String: String], operators: [PaymentOperatorIncoming]?, summary: PaymentSummary, addon: SheetAddon? = nil,
+         submit: @escaping (PaymentMethodPayin) async throws -> PayinAcceptedResponse) {
         self.form = form
         self.addon = addon
         self.prefill = prefill
@@ -146,12 +145,16 @@ final class PaymentSheetModel: ObservableObject {
         return [("", header)] + choices
     }
 
-    private static func options(_ field: FormField, _ operators: [PaymentOperator]) -> [(value: String, label: String)]? {
+    private static func options(_ field: FormField, _ operators: [PaymentOperatorIncoming]) -> [(value: String, label: String)]? {
         switch field.kind {
         case .choice: return field.options.map { ($0.value, text($0.label)) }
-        case .operator: return operators.isEmpty ? nil : operators.map { ($0.code, $0.name) }
+        case .operator:
+            let banks = operators.compactMap { op in op.code.map { ($0, op.name ?? $0) } }
+            return banks.isEmpty ? nil : banks
         // Typed when SYNQT lists no providers.
-        case .provider: return providers(operators).isEmpty ? nil : providers(operators).map { ($0.code, $0.name) }
+        case .provider:
+            let listed = providers(operators).compactMap { provider in provider.code.map { ($0, provider.name ?? $0) } }
+            return listed.isEmpty ? nil : listed
         default: return nil
         }
     }
@@ -233,7 +236,7 @@ final class PaymentSheetModel: ObservableObject {
         let problems = form.problems(values, chosen)
         if !problems.isEmpty { return showErrors(problems) }
         if let addon { return pay(addon) }
-        let method: PaymentMethod
+        let method: PaymentMethodPayin
         do {
             method = try form.build(FormValues(values: values))
         } catch {
@@ -259,23 +262,23 @@ final class PaymentSheetModel: ObservableObject {
         setProcessing(true)
         Task {
             defer { setProcessing(false) }
-            let method: JSON
+            let method: PaymentMethodPayin
             do {
-                method = try await addon.section.paymentMethod()
+                method = .addon(.init(paymentMethodCode: form.code, json: try await addon.section.paymentMethod()))
             } catch let sectionError as MethodSectionError {
                 return showErrors([PayinError(nil, sectionError.payerMessage)])
             } catch {
                 return showFailure(error)
             }
             onPaymentStarted()
-            await send { try await addon.submit(method) }
+            await send { try await self.submit(method) }
         }
     }
 
-    private func send(_ submit: () async throws -> CreatePayinResult) async {
+    private func send(_ submit: () async throws -> PayinAcceptedResponse) async {
         do {
             let result = try await submit()
-            if case .instructions(_, let next) = result, next.appLink != nil || next.qrCodeImageURL != nil || next.payInto != nil {
+            if let next = result.nextStep(), next.appLink != nil || next.qrCodeImageURL != nil || next.payInto != nil {
                 accepted = result
                 showNextStep(next)
             } else {
@@ -301,7 +304,7 @@ final class PaymentSheetModel: ObservableObject {
     }
 
     /// Returns the result once, however the sheet is closed.
-    func finish(_ result: CreatePayinResult?) {
+    func finish(_ result: PayinAcceptedResponse?) {
         guard !finished else { return }
         finished = true
         addon?.section.clear() // what the payer typed doesn't outlive the sheet

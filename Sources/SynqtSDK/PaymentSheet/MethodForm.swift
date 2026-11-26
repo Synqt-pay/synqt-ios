@@ -5,9 +5,9 @@ import Foundation
 enum FieldKind { case text, email, phone, number, choice, `operator`, provider }
 
 /// Every provider of `operators`, once each, whichever bank the payer picks.
-func providers(_ operators: [PaymentOperator]) -> [ExternalProvider] {
+func providers(_ operators: [PaymentOperatorIncoming]) -> [ExternalProvider] {
     var seen = Set<String>()
-    return operators.flatMap(\.externalProviders).filter { seen.insert($0.code).inserted }
+    return operators.flatMap { $0.externalProviders?.providers ?? [] }.filter { $0.code.map { seen.insert($0).inserted } ?? false }
 }
 
 /// One payer-facing input for a text field of a payment method, keyed by its JSON path (e.g. `customerName.lastName`).
@@ -73,15 +73,15 @@ struct OneOf: Sendable {
     }
 }
 
-/// A direct API method's inputs and how they become the typed `PaymentMethod`. Instances live in MethodFormData.swift.
+/// A direct API method's inputs and how they become the typed `PaymentMethodPayin`. Instances live in MethodFormData.swift.
 struct MethodForm: Sendable {
     let code: String
     let name: String
     let fields: [FormField]
     let oneOfs: [OneOf]
-    let build: @Sendable (FormValues) throws -> PaymentMethod
+    let build: @Sendable (FormValues) throws -> PaymentMethodPayin
 
-    init(_ code: String, _ name: String, _ fields: [FormField], oneOfs: [OneOf] = [], build: @escaping @Sendable (FormValues) throws -> PaymentMethod) {
+    init(_ code: String, _ name: String, _ fields: [FormField], oneOfs: [OneOf] = [], build: @escaping @Sendable (FormValues) throws -> PaymentMethodPayin) {
         self.code = code
         self.name = name
         self.fields = fields
@@ -183,6 +183,6 @@ extension String {
 }
 
 /// The payer-facing name of `code`, or nil if the sheet does not support it.
-func methodName(_ code: String) -> String? {
+func methodName(_ code: String?) -> String? {
     methodForms.first { $0.code == code }.map { text($0.name) } ?? Addons.shared.all.first { $0.code == code }?.name
 }

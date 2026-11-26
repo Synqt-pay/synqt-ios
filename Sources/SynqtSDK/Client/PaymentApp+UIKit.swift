@@ -9,7 +9,7 @@ func isReturn(_ url: URL, to returnURL: URL) -> Bool {
 import UIKit
 import WebKit
 
-/// How the Payment Web App closed. Either way, ask `Payin.status()` where the payment stands.
+/// How the Payment Web App closed. Either way, ask `IncomingPaymentsApi.getPayin` where the payment stands.
 public enum PaymentAppResult: Equatable, Sendable {
     /// The Payment Web App sent the payer to `returnURL`, with whatever it added to it.
     case returned(URL)
@@ -17,7 +17,7 @@ public enum PaymentAppResult: Equatable, Sendable {
     case closed
 }
 
-extension Payin {
+extension PayinCheckout {
     /**
      Shows SYNQT's hosted Payment Web App inside the app, over `viewController`, and returns once the payer reaches
      `returnURL` or closes it. `onPresented` runs once it is on screen. Links to other apps (bank apps, UPI) open

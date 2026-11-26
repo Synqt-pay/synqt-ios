@@ -354,7 +354,7 @@ private struct NextStepView: View {
     var body: some View {
         let colors = SynqtColors.for(scheme)
         let transfer = next.payInto
-        let amount = next.amountToPay?.description ?? model.summary.amount
+        let amount = next.amountToPay?.format() ?? model.summary.amount
         let name = model.methodName
         let how = transfer != nil ? text("synqt_next_transfer")
             : next.appLink != nil && next.qrCodeImageURL != nil ? text("synqt_next_open_or_scan", name)
@@ -376,11 +376,11 @@ private struct NextStepView: View {
                 .font(.synqt(20, .semibold)).foregroundColor(colors.text).padding(.top, 24).padding(.bottom, 8).accessibilityAddTraits(.isHeader)
             Text(how).font(.synqt(16)).foregroundColor(colors.textMuted).padding(.bottom, 8)
             if let exact = next.amountToPay {
-                Text(text("synqt_next_pay_exactly", exact.description)).font(.synqt(16, .medium)).monospacedDigit().foregroundColor(colors.text).padding(.bottom, 8)
+                Text(text("synqt_next_pay_exactly", exact.format() ?? amount)).font(.synqt(16, .medium)).monospacedDigit().foregroundColor(colors.text).padding(.bottom, 8)
             }
             if let account = transfer {
                 // A banking app wants the number alone, not "R100.00".
-                let copyAmount = next.amountToPay.map { ($0.amount as NSDecimalNumber).stringValue } ?? amount.filter { $0.isNumber || $0 == "." }
+                let copyAmount = next.amountToPay?.amount.map { ($0 as NSDecimalNumber).stringValue } ?? amount.filter { $0.isNumber || $0 == "." }
                 transferCard(account, amount, copyAmount, colors).padding(.vertical, 8)
                 notice(colors)
             } else if let ref = next.reference {
@@ -392,7 +392,7 @@ private struct NextStepView: View {
     }
 
     /// The bank details an OFFLINE payer types into their own banking app, each with a copy button.
-    private func transferCard(_ account: PaymentMethodResponse.Account, _ amount: String, _ copyAmount: String, _ colors: SynqtColors) -> some View {
+    private func transferCard(_ account: PaymentMethodResponsePayin.Account, _ amount: String, _ copyAmount: String, _ colors: SynqtColors) -> some View {
         // Branch is the primary detail and often repeats the bank code, so the bank code only stands in when there is no branch.
         let branch: (String, String, String?)? = shown(account.bankBranch).map { (text("synqt_next_branch"), $0, $0) }
             ?? shown(account.bankCode).map { (text("synqt_next_bank_code"), $0, $0) }

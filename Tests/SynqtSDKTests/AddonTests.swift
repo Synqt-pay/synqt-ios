@@ -7,7 +7,7 @@ final class AddonTests: XCTestCase {
         let code: String
         let name = "Test add-on"
         let secure = false
-        func section(payin: Payin, prefill: [String: String]) -> any MethodSection { fatalError("not drawn in unit tests") }
+        func section(checkout: PayinCheckout, prefill: [String: String]) -> any MethodSection { fatalError("not drawn in unit tests") }
     }
 
     func testAddedMethodIsOfferedAndNamedOnce() {
@@ -20,7 +20,8 @@ final class AddonTests: XCTestCase {
 
     func testThreeDSecureRedirectBecomesARedirect() throws {
         let json = #"{"paymentMethodResponse":{"paymentMethodCode":"CARD","userInteraction":{"type":"REDIRECT","url":"https://acs.example/3ds"}}}"#
-        XCTAssertEqual(.redirect(httpMethod: "GET", url: "https://acs.example/3ds", formData: [:]), try parseCreatePayin(Data(json.utf8)))
+        XCTAssertEqual(Redirection(method: "GET", url: "https://acs.example/3ds", data: nil),
+                       try JSONDecoder().decode(PayinAcceptedResponse.self, from: Data(json.utf8)).redirect())
     }
 
     /// A stand-in section: one field, refused or not.
@@ -43,14 +44,14 @@ final class AddonTests: XCTestCase {
     @MainActor
     func testSheetSendsTheSectionsMethodAndRoutesSynqtsFieldErrorsToIt() async {
         let section = Section()
-        var sent: [JSON] = []
+        var sent: [PaymentMethodPayin] = []
         let form = MethodForm("TEST_ADDON", "Test add-on", []) { _ in throw SynqtArgumentError("built by the add-on") }
-        let addon = SheetAddon(section: section, secure: false) { method in
+        let addon = SheetAddon(section: section, secure: false)
+        let model = PaymentSheetModel(form: form, prefill: [:], operators: [], summary: PaymentSummary(amount: "R1.00", merchant: nil, method: "Test", reference: "o-1"),
+                                      addon: addon) { method in
             sent.append(method)
             throw SynqtAPIError(httpCode: 406, errors: [.init(code: "INVALID_VALUE", field: "test.field", description: nil)])
         }
-        let model = PaymentSheetModel(form: form, prefill: [:], operators: [], summary: PaymentSummary(amount: "R1.00", merchant: nil, method: "Test", reference: "o-1"),
-                                      addon: addon) { _ in XCTFail("built-in submit"); throw URLError(.badURL) }
         XCTAssertNotEqual(text("synqt_sheet_intro_nothing_to_enter"), model.intro)
         section.problems = [("Test field", "Required")]
         model.pay()
@@ -58,7 +59,7 @@ final class AddonTests: XCTestCase {
         section.problems = []
         model.pay()
         while model.processing { await Task.yield() }
-        XCTAssertEqual([.object(["paymentMethodCode": .string("TEST_ADDON")])], sent)
+        XCTAssertEqual([.addon(.init(paymentMethodCode: "TEST_ADDON", json: .object(["paymentMethodCode": .string("TEST_ADDON")])))], sent)
         XCTAssertNotNil(section.shown["test.field"])
         XCTAssertNil(model.banner)
         model.close()

@@ -157,7 +157,7 @@ final class MethodFormsTests: XCTestCase {
     }
 
     func testEveryFormBuildsAMethodThatPassesItsOwnChecks() throws {
-        // Fill every field with something, so a form never builds a method that `create` would then reject.
+        // Fill every field with something, so a form never builds a method that `createPayin` would then reject.
         for methodForm in methodForms {
             let values = Dictionary(uniqueKeysWithValues: methodForm.fields.map { ($0.path, $0.options.first?.value ?? "x") })
             XCTAssertNoThrow(try methodForm.build(FormValues(values: values)).validate(), methodForm.code)
@@ -165,14 +165,14 @@ final class MethodFormsTests: XCTestCase {
     }
 
     func testPaymentOperatorsCarryTheirExternalProviders() throws {
-        let ops = parseOperators(try JSON.parse(Data(#"""
-            {"data":[{"code":"ZA_BANK","name":"A Bank","externalProviders":{"providers":[{"code":"P1","name":"Provider one"},{"name":"no code"}]}},
-               {"code":"ZA_OTHER"},{"name":"no code"}]}
-            """#.utf8))["data"])
-        XCTAssertEqual([
-            PaymentOperator(code: "ZA_BANK", name: "A Bank", externalProviders: [ExternalProvider(code: "P1", name: "Provider one")]),
-            PaymentOperator(code: "ZA_OTHER", name: "ZA_OTHER"),
-        ], ops)
+        let op = try JSONDecoder().decode(PaymentOperatorIncoming.self, from: Data(#"""
+            {"code":"ZA_BANK","name":"A Bank","externalProviders":{"providers":[{"code":"P1","name":"Provider one"},{"name":"no code"}]}}
+            """#.utf8))
+        XCTAssertEqual(PaymentOperatorIncoming(code: "ZA_BANK", name: "A Bank", externalProviders: ExternalProviders(providers: [
+            ExternalProvider(code: "P1", name: "Provider one"), ExternalProvider(code: nil, name: "no code"),
+        ])), op)
+        // The sheet skips providers without a code.
+        XCTAssertEqual([ExternalProvider(code: "P1", name: "Provider one")], providers([op]))
     }
 
     func testProvidersListEveryBanksProvidersOnce() {
@@ -180,10 +180,13 @@ final class MethodFormsTests: XCTestCase {
         let p1 = ExternalProvider(code: "STANDARDBANK", name: "StandardBank")
         let p2 = ExternalProvider(code: "SHYFT", name: "Shyft")
         let p3 = ExternalProvider(code: "CAPITEC", name: "CAPITEC")
+        let bank = { (code: String, name: String, providers: [ExternalProvider]) in
+            PaymentOperatorIncoming(code: code, name: name, externalProviders: ExternalProviders(providers: providers))
+        }
         let banks = [
-            PaymentOperator(code: "ZA_STANDARD", name: "Standard Bank", externalProviders: [p1, p2]),
-            PaymentOperator(code: "ZA_CAPITEC", name: "Capitec", externalProviders: [p3, p1]),
-            PaymentOperator(code: "NG_BANK", name: "Another market", externalProviders: [ExternalProvider(code: "NG_P", name: "x")]),
+            bank("ZA_STANDARD", "Standard Bank", [p1, p2]),
+            bank("ZA_CAPITEC", "Capitec", [p3, p1]),
+            bank("NG_BANK", "Another market", [ExternalProvider(code: "NG_P", name: "x")]),
         ]
         XCTAssertEqual([p1, p2, p3, ExternalProvider(code: "NG_P", name: "x")], providers(banks))
         XCTAssertEqual(.provider, form("PAYSHAP").fields.first { $0.path == "externalProviderCode" }!.kind)
@@ -206,12 +209,14 @@ final class MethodFormsTests: XCTestCase {
     }
 
     func testPaymentOptionsCarryOperatorsAndPayerFacingNames() throws {
-        let options = parsePaymentOptions(try JSON.parse(Data(#"""
+        let options = try XCTUnwrap(JSONDecoder().decode(AvailablePayinOptionList.self, from: Data(#"""
             {"data":[{"paymentMethodCode":"FPX","paymentOperators":[{"code":"MBB","name":"Maybank"},{"code":"X"}]},
                {"paymentMethodCode":"BRAND_NEW","segmentCode":"S1"}]}
-            """#.utf8)))
-        XCTAssertEqual(PaymentOption(code: "FPX", operators: [PaymentOperator(code: "MBB", name: "Maybank"), PaymentOperator(code: "X", name: "X")], segmentCode: nil), options[0])
-        XCTAssertEqual(PaymentOption(code: "BRAND_NEW", operators: [], segmentCode: "S1"), options[1])
+            """#.utf8)).data)
+        XCTAssertEqual(AvailablePayinOption(paymentMethodCode: "FPX", paymentOperators: [
+            PaymentOperatorIncoming(code: "MBB", name: "Maybank", externalProviders: nil), PaymentOperatorIncoming(code: "X", name: nil, externalProviders: nil),
+        ], segmentCode: nil), options[0])
+        XCTAssertEqual(AvailablePayinOption(paymentMethodCode: "BRAND_NEW", paymentOperators: nil, segmentCode: "S1"), options[1])
         XCTAssertEqual("FPX online banking", options[0].name)
         XCTAssertNil(options[1].name) // the sheet cannot show it, so it has no payer-facing name
     }

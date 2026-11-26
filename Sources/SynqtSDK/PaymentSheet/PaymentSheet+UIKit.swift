@@ -2,14 +2,15 @@
 import SwiftUI
 import UIKit
 
-extension Payin {
+extension PayinCheckout {
     /**
      Collects the payer's details for `paymentMethodCode` (one of `Synqt.directPaymentMethods`) in a Synqt-branded sheet
-     over `viewController`, then creates the payin as `create` does. Errors, including SYNQT's field errors, stay in the
-     sheet so the payer can correct them. Returns nil if the payer closes it; cancelling the calling task closes it too.
+     over `viewController`, then creates the payin with `IncomingPaymentsApi.createPayin` and returns what SYNQT
+     accepted. Errors, including SYNQT's field errors, stay in the sheet so the payer can correct them. Returns nil if the
+     payer closes it; cancelling the calling task closes it too.
 
-     The bank or provider field lists the banks `availablePaymentOptions` returns for this payin and
-     `paymentMethodCode` (PAYIN_CREATE allows that call); an optional one is hidden when SYNQT lists none. The summary
+     The bank or provider field lists the banks `IncomingPaymentsApi.payinAvailablePaymentOptions` returns for this
+     payin and `paymentMethodCode` (PAYIN_CREATE allows that call); an optional one is hidden when SYNQT lists none. The summary
      names the merchant when the token also allows `GET /merchant-info`. `prefill` is keyed by field path, such as
      `emailAddress` or `customerName.lastName`. CARD is offered only with SYNQT's card add-on, for PCI DSS compliant
      merchants.
@@ -27,7 +28,7 @@ extension Payin {
     public func presentPaymentSheet(from viewController: UIViewController, paymentMethodCode: String,
                                     prefill: [String: String] = [:], customerIP: String? = nil,
                                     onPresented: @escaping @MainActor () -> Void = {},
-                                    onPaymentStarted: @escaping @MainActor () -> Void = {}) async throws -> CreatePayinResult? {
+                                    onPaymentStarted: @escaping @MainActor () -> Void = {}) async throws -> PayinAcceptedResponse? {
         let method = Addons.shared.all.first { $0.code == paymentMethodCode }
         // An add-on's method draws its own fields, so the sheet gets an empty form, named in the payer's language already.
         guard let form = methodForms.first(where: { $0.code == paymentMethodCode })
@@ -35,12 +36,12 @@ extension Payin {
             throw SynqtArgumentError("Unknown paymentMethodCode \(paymentMethodCode)")
         }
         let (operators, merchant) = await sheetContext(for: form)
-        let summary = PaymentSummary(amount: money.description, merchant: merchant, method: text(form.name), reference: id)
+        let summary = PaymentSummary(amount: money.format(), merchant: merchant, method: text(form.name), reference: id)
         let addon = method.map { sheetMethod in
-            SheetAddon(section: sheetMethod.section(payin: self, prefill: prefill), secure: sheetMethod.secure) { try await self.create($0, customerIP: customerIP) }
+            SheetAddon(section: sheetMethod.section(checkout: self, prefill: prefill), secure: sheetMethod.secure)
         }
         let model = PaymentSheetModel(form: form, prefill: prefill, operators: operators, summary: summary, addon: addon) { method in
-            try await self.create(method, customerIP: customerIP)
+            try await self.createPayin(method, customerIP: customerIP)
         }
         model.onPaymentStarted = onPaymentStarted
         model.reloadOperators = { await self.sheetOperators(for: form) }
@@ -97,11 +98,11 @@ private final class PaymentSheetController: UIHostingController<PaymentSheetView
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    func present(from presenter: UIViewController, onPresented: @escaping @MainActor () -> Void) async -> CreatePayinResult? {
+    func present(from presenter: UIViewController, onPresented: @escaping @MainActor () -> Void) async -> PayinAcceptedResponse? {
         // UIKit refuses these without calling the completion, which would leave the caller waiting for ever.
         guard presenter.viewIfLoaded?.window != nil, presenter.presentedViewController == nil else { return nil }
         return await withTaskCancellationHandler {
-            await withCheckedContinuation { (done: CheckedContinuation<CreatePayinResult?, Never>) in
+            await withCheckedContinuation { (done: CheckedContinuation<PayinAcceptedResponse?, Never>) in
                 let stopFollowing = followPhoneStyle(scene: presenter.view.window?.windowScene)
                 let stopConcealing = model.addon?.secure == true ? conceal() : {}
                 model.onFinish = { [weak self] result in
