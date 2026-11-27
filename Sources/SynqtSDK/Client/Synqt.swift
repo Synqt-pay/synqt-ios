@@ -17,7 +17,7 @@ public struct Synqt: Sendable {
     /// Where each SYNQT environment lives. The base URLs are public for backend calls such as minting tokens.
     public enum Environment: String, CaseIterable, Sendable {
         case sandbox
-        /// SYNQT internal development platform, as in the WordPress plugin. Not for merchants.
+        /// SYNQT internal development platform. Not for merchants.
         case stable
         case live
 

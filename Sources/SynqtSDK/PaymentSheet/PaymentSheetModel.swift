@@ -180,7 +180,6 @@ final class PaymentSheetModel: ObservableObject {
 
     func binding(_ field: FormField) -> Binding<String> {
         Binding(get: { self.values[field.path] ?? "" }, set: { newValue in
-            // As the Android sheet's length filter: longer input is cut off as it is typed.
             self.values[field.path] = field.maxLength.map { String(newValue.prefix($0)) } ?? newValue
             self.edit(field.path)
         })
@@ -345,8 +344,7 @@ final class PaymentSheetModel: ObservableObject {
     }
 
     /// Errors for a shown field go under it; the rest go in the banner above the Pay button, named by label, not JSON
-    /// path. The first field with an error is scrolled to and focused, and VoiceOver reads every error out, as Android's
-    /// live regions do.
+    /// path. The first field with an error is scrolled to and focused, and VoiceOver reads every error out.
     private func showErrors(_ errors: [PayinError], fromSynqt: Bool = false) {
         var general = [String]()
         var spoken = [String]()

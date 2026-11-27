@@ -77,7 +77,7 @@ private final class PaymentSheetController: UIHostingController<PaymentSheetView
             guard let self, view.bounds.width > 0 else { return }
             preferredContentSize = CGSize(width: view.bounds.width, height: height.rounded(.up)) // a zero width is ignored
         }
-        // Only the close button closes it, like Android: no tap outside, and no swipe down, as iOS can't block one without the other.
+        // Only the close button closes it: no tap outside, and no swipe down, as iOS can't block one without the other.
         isModalInPresentation = true
         model.openLink = { link in
             guard let url = URL(string: link) else { return false }

@@ -9,7 +9,7 @@ let synqtBundle = Bundle(for: BundleToken.self)
 #endif
 
 /// Payer-facing text in the phone's language: the sheet's own wording from Synqt.strings, or the field
-/// labels, hints and method names from SynqtForm.strings. Keys are the Android SDK's string resource names. Add-ons
+/// labels, hints and method names from SynqtForm.strings. Add-ons
 /// use it for the sheet's shared wording, such as "Required".
 @_spi(SynqtAddon)
 public func text(_ key: String, _ args: CVarArg...) -> String {

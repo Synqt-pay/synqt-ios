@@ -126,7 +126,7 @@ private struct OptionsBody: Encodable {
     let segmentCode: String?
 }
 
-/// As Java's URLEncoder leaves them, so the link matches the Android SDK's: letters, digits and `-._*`.
+/// As Java's URLEncoder leaves them: letters, digits and `-._*`.
 private let unreserved = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._*")
 
 private func enc(_ value: String) -> String { value.addingPercentEncoding(withAllowedCharacters: unreserved) ?? value }
