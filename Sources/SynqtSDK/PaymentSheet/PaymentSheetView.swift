@@ -48,7 +48,6 @@ struct PaymentSheetView: View {
         .tint(colors.action)
     }
 
-    /// Wordmark on the left, close button on the right.
     private var header: some View {
         HStack {
             SynqtLogo(ink: colors.logoInk)
@@ -414,7 +413,7 @@ private struct NextStepView: View {
         .background(RoundedRectangle(cornerRadius: 12).fill(colors.surfacePanel))
     }
 
-    /// What the payer must know before transferring. Draft wording, based on the Payment Web App's notice.
+    /// What the payer must know before transferring.
     private func notice(_ colors: SynqtColors) -> some View {
         let items = ["synqt_next_notice_exact", "synqt_next_notice_once", "synqt_next_notice_fees", "synqt_next_notice_own_account"]
         return VStack(alignment: .leading, spacing: 8) {

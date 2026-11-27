@@ -1,7 +1,7 @@
 import Foundation
 
 /**
- A JSON value, read loosely the way the Android SDK reads SYNQT's responses: a missing, null or empty value reads as nil
+ A JSON value, read loosely: a missing, null or empty value reads as nil
  rather than failing the whole response. Numbers stay `Decimal`, so amounts are never rounded through a Double.
  Add-ons read and build SYNQT's JSON with it.
  */

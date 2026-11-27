@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The sheet's line icons: Phosphor Icons, Regular weight (@phosphor-icons/core 2.1.1, MIT licence, see
-/// THIRD_PARTY_NOTICES.md), the same paths as the Android SDK's drawables, on Phosphor's 256 by 256 grid.
+/// THIRD_PARTY_NOTICES.md), on Phosphor's 256 by 256 grid.
 enum SynqtIcon: CaseIterable {
     case lock, close, warning, chevronDown, copy, timer
 
@@ -35,7 +35,7 @@ struct IconView: View {
 }
 
 /// The Synqt wordmark, 26pt tall (the smallest size the brand uses). Paths and offsets are copied unchanged from the
-/// synqt-brand-design skill's synqt-logo-positive.svg: letters in the logo ink (positive on light, negative on dark),
+/// brand's synqt-logo-positive.svg: letters in the logo ink (positive on light, negative on dark),
 /// the dot always magenta. Never redraw it.
 struct SynqtLogo: View {
     let ink: Color

@@ -1,7 +1,5 @@
 import Foundation
 
-// Reads SYNQT API responses into the public models.
-
 /// SYNQT error bodies, as a list or a single object. attrValue is dropped on purpose.
 func parseErrors(_ body: Data) -> [SynqtAPIError.Reason] {
     guard let json = try? JSON.parse(body) else { return [] }
